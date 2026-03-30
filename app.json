@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Tassulokero",
+    "slug": "tassulokero",
+    "version": "0.1.0",
+    "scheme": "tassulokero",
+    "icon": "./assets/icon.png",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.webory.tassulokero",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.webory.tassulokero",
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F4EFE8"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F4EFE8"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-font",
+      "expo-asset"
+    ]
+  }
+}
