@@ -36,10 +36,10 @@ export function AuthScreen() {
 
   const helperText = useMemo(() => {
     if (hasSupabaseEnv()) {
-      return "Voit jatkaa kirjautumalla sisään.";
+      return "Kirjaudu sisään jatkaaksesi.";
     }
 
-    return "Voit kokeilla kirjautumista heti tässä esikatselussa.";
+    return "Voit kokeilla appia heti tässä esikatselussa.";
   }, []);
 
   async function handleSubmit() {
@@ -83,8 +83,8 @@ export function AuthScreen() {
       <View style={styles.authShell}>
         <View style={styles.hero}>
           <Text style={styles.eyebrow}>Tassulokero</Text>
-          <Text style={styles.title}>Lemmikin arki yhdessä paikassa</Text>
-          <Text style={styles.body}>Kirjaudu sisään tai luo tili jatkaaksesi.</Text>
+          <Text style={styles.title}>Lemmikin arki samassa paikassa</Text>
+          <Text style={styles.body}>Kirjaudu sisään tai luo tili.</Text>
         </View>
 
         <Card style={styles.formCard}>
@@ -106,7 +106,7 @@ export function AuthScreen() {
           </View>
 
           <View style={styles.form}>
-            {isLoading ? <LoadingState title="Kirjautuminen käynnissä" message="Käsitellään pyyntöä turvallisesti." /> : null}
+            {isLoading ? <LoadingState title="Kirjaudutaan" message="Hetki vain." /> : null}
             {authMode === "sign-up" ? (
               <>
                 <TextField
@@ -116,7 +116,7 @@ export function AuthScreen() {
                     clearError();
                     setDisplayName(value);
                   }}
-                  placeholder="Näyttönimi"
+                  placeholder="Nimi"
                   editable={!isLoading}
                 />
                 <SegmentedControl options={roleOptions} value={roleProfile} onChange={(value) => setRoleProfile(value as RoleProfile)} />
@@ -144,7 +144,7 @@ export function AuthScreen() {
                   clearError();
                   setPassword(value);
                 }}
-                placeholder="Salasana"
+                placeholder="Kirjoita salasana"
                 secureTextEntry
                 editable={!isLoading}
               />
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   formCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     borderRadius: 30,
     padding: spacing[5],
   },
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   },
   modeOptionActive: {
     backgroundColor: colors.brandPrimarySoft,
-    borderColor: "rgba(127, 168, 131, 0.2)",
+    borderColor: colors.borderAccent,
   },
   modeLabel: {
     color: colors.textPrimary,

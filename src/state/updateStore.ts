@@ -1,6 +1,5 @@
 import { create } from "zustand";
 
-import { currentUser } from "../data/mockData";
 import { listUpdatesForUser, savePetUpdate as savePetUpdateToDb } from "../lib/db";
 import { PetUpdate } from "../types/domain";
 
@@ -29,7 +28,7 @@ export const useUpdateStore = create<UpdateState>((set) => ({
       updates: rows.map((row: any) => ({
         id: row.id,
         petId: row.pet_id,
-        authorName: row.author_user_id === dbUserId ? sessionUser?.displayName ?? currentUser.displayName : String(row.author_user_id),
+        authorName: row.author_user_id === dbUserId ? sessionUser?.displayName ?? "Sinä" : "Jaettu käyttäjä",
         authorRole: row.author_user_id === dbUserId ? "owner" : undefined,
         text: row.body,
         createdAt: row.created_at,

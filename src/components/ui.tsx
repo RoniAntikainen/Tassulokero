@@ -190,7 +190,7 @@ export function PickerField<TValue extends string>({
         </Text>
         <Text style={styles.pickerChevron}>{open ? "˄" : "˅"}</Text>
       </Pressable>
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+      <Modal visible={open} transparent animationType="none" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.overlayScrim} onPress={() => setOpen(false)}>
           <Pressable style={styles.overlayCard} onPress={() => undefined}>
             <View style={styles.overlayHeader}>
@@ -308,7 +308,7 @@ export function DatePickerField({
         </Text>
         <Text style={styles.pickerChevron}>˅</Text>
       </Pressable>
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+      <Modal visible={open} transparent animationType="none" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.overlayScrim} onPress={() => setOpen(false)}>
           <Pressable style={[styles.overlayCard, styles.calendarCard]} onPress={() => undefined}>
             <View style={styles.overlayHeader}>
@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
   pill: {
     alignSelf: "flex-start",
     borderRadius: radii.full,
-    backgroundColor: colors.bgBase,
+    backgroundColor: colors.surfaceRaised,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
     borderWidth: 1,
@@ -536,19 +536,19 @@ const styles = StyleSheet.create({
   },
   pillBrand: {
     backgroundColor: colors.brandPrimarySoft,
-    borderColor: "#DCEAD9",
+    borderColor: colors.borderAccent,
   },
   pillWarning: {
-    backgroundColor: "#FFF8E8",
-    borderColor: "#F1DFB3",
+    backgroundColor: colors.surfaceWarning,
+    borderColor: colors.borderWarning,
   },
   pillDanger: {
-    backgroundColor: "#FDF0EC",
-    borderColor: "#EFCFC5",
+    backgroundColor: colors.surfaceDanger,
+    borderColor: colors.borderDanger,
   },
   pillSuccess: {
-    backgroundColor: "#EEF8F1",
-    borderColor: "#D3E8D9",
+    backgroundColor: colors.surfaceSuccess,
+    borderColor: colors.borderSuccess,
   },
   pillText: {
     color: colors.textSecondary,
@@ -566,15 +566,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: spacing[5],
     borderWidth: 1,
-    borderColor: colors.brandPrimaryHover,
-    shadowColor: colors.brandPrimaryHover,
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
+    borderColor: colors.brandPrimary,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
   },
   buttonSecondary: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     shadowOpacity: 0,
@@ -605,12 +604,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     paddingHorizontal: spacing[5],
     paddingVertical: spacing[3],
     color: colors.textPrimary,
     fontSize: typography.size.md,
-    shadowColor: "#101828",
+    shadowColor: colors.textPrimary,
     shadowOpacity: 0.03,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
@@ -637,10 +636,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[2],
   },
   segmentedItemActive: {
-    backgroundColor: "#FCFDFE",
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    shadowColor: "#101828",
+    shadowColor: colors.textPrimary,
     shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
@@ -658,13 +657,13 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[4],
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.surfaceInfo,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.borderDefault,
   },
   inlineMessageWarning: {
-    backgroundColor: "#FFFBF2",
-    borderColor: "#F0E0B6",
+    backgroundColor: colors.surfaceWarning,
+    borderColor: colors.borderWarning,
   },
   inlineMessageText: {
     color: colors.textSecondary,
@@ -675,12 +674,12 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     padding: spacing[6],
     gap: spacing[3],
   },
   stateCardDanger: {
-    backgroundColor: "#FFF7F4",
+    backgroundColor: colors.surfaceDanger,
   },
   stateTitle: {
     color: colors.textPrimary,
@@ -700,7 +699,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[3],
     gap: spacing[2],
@@ -726,7 +725,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     paddingHorizontal: spacing[5],
     paddingVertical: spacing[3],
     justifyContent: "space-between",
@@ -758,11 +757,11 @@ const styles = StyleSheet.create({
   },
   overlayCard: {
     borderRadius: radii.xl,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     padding: spacing[4],
-    shadowColor: "#101828",
+    shadowColor: colors.textPrimary,
     shadowOpacity: 0.08,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
@@ -805,7 +804,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     paddingHorizontal: spacing[4],
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.borderDefault,
   },
@@ -882,7 +881,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
   },
   calendarDayActive: {
     backgroundColor: colors.brandPrimary,

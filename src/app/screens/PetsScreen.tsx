@@ -15,7 +15,9 @@ export function PetsScreen() {
   const reminders = useReminderStore((state) => state.reminders);
   const vaccinations = useHealthStore((state) => state.vaccinations);
   const selectedPetId = useAppStore((state) => state.selectedPetId);
+  const pendingPetDetailOpen = useAppStore((state) => state.pendingPetDetailOpen);
   const setSelectedPetId = useAppStore((state) => state.setSelectedPetId);
+  const setPendingPetDetailOpen = useAppStore((state) => state.setPendingPetDetailOpen);
   const setActiveTab = useAppStore((state) => state.setActiveTab);
   const setPendingAddSection = useAppStore((state) => state.setPendingAddSection);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -33,6 +35,15 @@ export function PetsScreen() {
     }
   }, [pets, selectedPetId, setSelectedPetId]);
 
+  useEffect(() => {
+    if (!pendingPetDetailOpen) {
+      return;
+    }
+
+    setIsDetailOpen(true);
+    setPendingPetDetailOpen(false);
+  }, [pendingPetDetailOpen, setPendingPetDetailOpen]);
+
   function openAddPet() {
     setPendingAddSection("pet");
     setActiveTab("pets");
@@ -40,6 +51,7 @@ export function PetsScreen() {
 
   function openPetDetail(petId: string) {
     setSelectedPetId(petId);
+    setPendingPetDetailOpen(false);
     setIsDetailOpen(true);
   }
 
@@ -141,7 +153,7 @@ export function PetsScreen() {
 
 const styles = StyleSheet.create({
   hero: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     borderRadius: 28,
     padding: spacing[6],
     borderWidth: 1,
@@ -170,7 +182,7 @@ const styles = StyleSheet.create({
     width: "48%",
     minHeight: 170,
     borderRadius: 20,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     padding: spacing[4],
@@ -235,7 +247,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
     borderRadius: 999,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.borderDefault,
   },

@@ -3,10 +3,12 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AppButton, Card, EmptyState, InlineMessage, Pill, Screen, SectionTitle, SegmentedControl, TextField } from "../../components/ui";
 import { formatDueDate } from "../../lib/date";
+import { canManageReminders, canViewReminders } from "../../lib/permissions";
 import { useAppStore } from "../../state/appStore";
 import { usePetStore } from "../../state/petStore";
 import { getReminderGroup, useReminderStore } from "../../state/reminderStore";
-import { colors, spacing, typography } from "../../theme/tokens";
+import { useAuthStore } from "../../state/authStore";
+import { colors, radii, spacing, typography } from "../../theme/tokens";
 
 const groupLabels = {
   today: "Tänään",
@@ -22,8 +24,11 @@ export function RemindersScreen() {
   const completeReminder = useReminderStore((state) => state.completeReminder);
   const cancelReminder = useReminderStore((state) => state.cancelReminder);
   const viewerRole = useAppStore((state) => state.viewerRole);
+  const sessionUser = useAuthStore((state) => state.sessionUser);
   const setActiveTab = useAppStore((state) => state.setActiveTab);
   const setPendingAddSection = useAppStore((state) => state.setPendingAddSection);
+  const pendingReminderDetailId = useAppStore((state) => state.pendingReminderDetailId);
+  const setPendingReminderDetailId = useAppStore((state) => state.setPendingReminderDetailId);
   const flashMessage = useAppStore((state) => state.flashMessage);
   const setFlashMessage = useAppStore((state) => state.setFlashMessage);
   const [selectedPetFilter, setSelectedPetFilter] = useState<string>("all");
@@ -33,9 +38,9 @@ export function RemindersScreen() {
   const [editDescription, setEditDescription] = useState("");
   const [editDueAt, setEditDueAt] = useState("");
   const [editMessage, setEditMessage] = useState<string | null>(null);
-  const canManageReminders = viewerRole === "owner" || viewerRole === "family";
-  const canViewReminders = viewerRole === "owner" || viewerRole === "family";
-  const currentAssigneeLabel = viewerRole === "family" ? "Sanna" : viewerRole === "owner" ? "Roni" : "";
+  const canManageRemindersAccess = canManageReminders(viewerRole);
+  const canViewRemindersAccess = canViewReminders(viewerRole);
+  const currentAssigneeLabel = sessionUser?.displayName ?? "Sinä";
   const pendingReminders = groupedCount(reminders, currentAssigneeLabel, "pending");
   const completedReminders = groupedCount(reminders, currentAssigneeLabel, "completed");
   const cancelledReminders = groupedCount(reminders, currentAssigneeLabel, "cancelled");
@@ -58,6 +63,8 @@ export function RemindersScreen() {
     [currentAssigneeLabel, reminders, selectedPetFilter],
   );
   const hasVisibleReminders = groupedReminders.some((group) => group.items.length > 0);
+  const selectedReminder = reminders.find((item) => item.id === selectedReminderId) ?? null;
+  const selectedReminderPet = selectedReminder ? pets.find((item) => item.id === selectedReminder.petId) : undefined;
 
   useEffect(() => {
     if (!flashMessage) {
@@ -70,6 +77,16 @@ export function RemindersScreen() {
 
     return () => clearTimeout(timeout);
   }, [flashMessage, setFlashMessage]);
+
+  useEffect(() => {
+    if (!pendingReminderDetailId) {
+      return;
+    }
+
+    setSelectedReminderId(pendingReminderDetailId);
+    setEditingReminderId(null);
+    setPendingReminderDetailId(null);
+  }, [pendingReminderDetailId, setPendingReminderDetailId]);
 
   function beginReminderEdit(reminderId: string) {
     const reminder = reminders.find((item) => item.id === reminderId);
@@ -110,7 +127,7 @@ export function RemindersScreen() {
       description: editDescription.trim() || undefined,
       dueAt: parsedDate.toISOString(),
     });
-    setEditMessage("Muistutus päivitettiin.");
+      setEditMessage("Muistutus tallennettu.");
     setEditingReminderId(null);
   }
 
@@ -119,33 +136,113 @@ export function RemindersScreen() {
     setActiveTab("pets");
   }
 
+  function returnToReminderList() {
+    setSelectedReminderId(null);
+    setEditingReminderId(null);
+    setSelectedPetFilter("all");
+    setActiveTab("reminders");
+  }
+
   return (
     <Screen>
-      <View style={styles.heroCard}>
-        <Text style={styles.heroEyebrow}>Muistutukset</Text>
-        <Text style={styles.heroTitle}>Pidä tärkeät asiat hallinnassa</Text>
-        <Text style={styles.heroBody}>Näe tulevat tehtävät, kuittaa ne valmiiksi ja tee muutokset yhdestä paikasta.</Text>
-        {canViewReminders ? (
-          <View style={styles.heroSummary}>
-            <SummaryTile label="Avoinna" value={String(pendingReminders)} />
-            <SummaryTile label="Valmiit" value={String(completedReminders)} />
-            <SummaryTile label="Perutut" value={String(cancelledReminders)} />
-          </View>
-        ) : null}
-      </View>
-      {!canViewReminders ? (
+      {!selectedReminder ? (
+        <View style={styles.heroCard}>
+          <Text style={styles.heroEyebrow}>Muistutukset</Text>
+          <Text style={styles.heroTitle}>Kaikki muistutukset yhdessä paikassa</Text>
+          <Text style={styles.heroBody}>Näe tulevat tehtävät, päivitä niitä ja kuittaa valmiiksi.</Text>
+          {canViewRemindersAccess ? (
+            <View style={styles.heroSummary}>
+              <SummaryTile label="Avoinna" value={String(pendingReminders)} />
+              <SummaryTile label="Valmiit" value={String(completedReminders)} />
+              <SummaryTile label="Perutut" value={String(cancelledReminders)} />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+      {!canViewRemindersAccess ? (
         <Card>
           <InlineMessage
             tone="warning"
             message={
               viewerRole === "caretaker"
-                ? "Hoitaja ei näe eikä voi hallita muistutuksia."
-                : "Kasvattajan muistutukset ovat tässä näkymässä piilossa."
+                ? "Hoitaja ei näe muistutuksia."
+                : "Kasvattajan muistutukset on piilotettu tästä näkymästä."
             }
           />
         </Card>
       ) : null}
-      {canViewReminders ? (
+      {canViewRemindersAccess ? (
+        <>
+      {selectedReminder && editingReminderId !== selectedReminder.id ? (
+        <>
+          <View style={styles.detailScreenHeader}>
+            <Pressable
+              onPress={returnToReminderList}
+              style={styles.detailBackButton}
+            >
+              <Text style={styles.detailBackLabel}>Takaisin</Text>
+            </Pressable>
+            {canManageRemindersAccess ? (
+              <Pressable onPress={openAddReminder} style={styles.detailAddButton}>
+                <Text style={styles.detailAddLabel}>Lisää muistutus</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <Card style={styles.selectedReminderCard}>
+            <View style={styles.selectedReminderTop}>
+              <View style={styles.selectedReminderCopy}>
+                <Text style={styles.selectedReminderTitle}>{selectedReminder.title}</Text>
+                <Text style={styles.selectedReminderPet}>{selectedReminderPet?.name ?? "Lemmikki"}</Text>
+                <Text style={styles.selectedReminderDate}>{formatDueDate(selectedReminder.dueAt)}</Text>
+              </View>
+              <Pill
+                label={formatReminderStatus(selectedReminder.status)}
+                tone={
+                  selectedReminder.status === "completed"
+                    ? "success"
+                    : getReminderGroup(selectedReminder) === "overdue"
+                      ? "danger"
+                      : getReminderGroup(selectedReminder) === "today"
+                        ? "warning"
+                        : "brand"
+                }
+              />
+            </View>
+
+            <View style={styles.selectedReminderMetaRow}>
+              <Pill label={formatReminderType(selectedReminder.type)} tone="neutral" />
+              <Text style={styles.selectedReminderMetaText}>{selectedReminder.assigneeLabel}</Text>
+            </View>
+
+            <View style={styles.selectedReminderSection}>
+              <Text style={styles.selectedReminderSectionLabel}>Kuvaus</Text>
+              <Text style={styles.selectedReminderSectionText}>
+                {selectedReminder.description ?? "Ei lisätietoja"}
+              </Text>
+            </View>
+
+            <View style={styles.selectedReminderSection}>
+              <Text style={styles.selectedReminderSectionLabel}>Ajankohta</Text>
+              <Text style={styles.selectedReminderSectionText}>{formatDueDate(selectedReminder.dueAt)}</Text>
+            </View>
+
+            {selectedReminder.status === "pending" && canManageRemindersAccess ? (
+              <View style={styles.actionRow}>
+                <Pressable onPress={() => completeReminder(selectedReminder.id)} style={[styles.actionButton, styles.actionButtonPrimary]}>
+                  <Text style={[styles.actionLabel, styles.actionLabelPrimary]}>Kuittaa valmiiksi</Text>
+                </Pressable>
+                <Pressable onPress={() => beginReminderEdit(selectedReminder.id)} style={[styles.actionButton, styles.actionButtonNeutral]}>
+                  <Text style={styles.actionLabel}>Muokkaa</Text>
+                </Pressable>
+                <Pressable onPress={() => cancelReminder(selectedReminder.id)} style={[styles.actionButton, styles.actionButtonDanger]}>
+                  <Text style={[styles.actionLabel, styles.actionLabelDanger]}>Peruuta</Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </Card>
+        </>
+      ) : null}
+      {!selectedReminder ? (
         <>
       {flashMessage ? (
         <Card>
@@ -153,7 +250,7 @@ export function RemindersScreen() {
         </Card>
       ) : null}
       <Card>
-        <InlineMessage tone="info" message={`Tässä näkymässä näkyvät ${currentAssigneeLabel.toLowerCase()}n omat muistutukset.`} />
+        <InlineMessage tone="info" message="Näkymässä näkyvät sinun omat muistutuksesi." />
       </Card>
       <Card>
         <View style={styles.filterSection}>
@@ -161,12 +258,15 @@ export function RemindersScreen() {
           <SegmentedControl options={filterOptions} value={selectedPetFilter} onChange={setSelectedPetFilter} />
         </View>
       </Card>
+      {canManageRemindersAccess ? (
+        <AppButton label="Lisää muistutus" onPress={openAddReminder} />
+      ) : null}
       {!hasVisibleReminders ? (
         <Card>
           <EmptyState
             title="Ei muistutuksia"
-            message="Kun lisäät ensimmäisen muistutuksen, se näkyy tässä heti."
-            actionLabel="Luo muistutus"
+            message="Lisää muistutus, niin se näkyy tässä."
+            actionLabel="Lisää muistutus"
             onAction={openAddReminder}
           />
         </Card>
@@ -182,19 +282,18 @@ export function RemindersScreen() {
             </View>
             {items.map((reminder) => {
               const pet = pets.find((item) => item.id === reminder.petId);
-              const isDetailOpen = selectedReminderId === reminder.id;
 
               return (
                 <Card key={reminder.id} style={styles.reminderCard}>
                   {editingReminderId === reminder.id ? (
                     <View style={styles.editForm}>
                       {editMessage ? <InlineMessage tone="info" message={editMessage} /> : null}
-                      <TextField label="Otsikko" value={editTitle} onChangeText={setEditTitle} placeholder="Lisää otsikko" />
+                      <TextField label="Otsikko" value={editTitle} onChangeText={setEditTitle} placeholder="Otsikko" />
                       <TextField
                         label="Kuvaus"
                         value={editDescription}
                         onChangeText={setEditDescription}
-                        placeholder="Lisää kuvaus"
+                        placeholder="Kuvaus"
                       />
                       <TextField label="Ajankohta" value={editDueAt} onChangeText={setEditDueAt} placeholder="2026-04-01T09:00" />
                       <View style={styles.editActionRow}>
@@ -211,52 +310,35 @@ export function RemindersScreen() {
                     </View>
                   ) : (
                     <>
-                      <View style={styles.topRow}>
-                        <View style={styles.content}>
-                          <Text style={styles.title}>{reminder.title}</Text>
-                          <Text style={styles.description}>
-                            {reminder.description ?? "Ei tarkennuksia"}
-                          </Text>
+                      <Pressable onPress={() => setSelectedReminderId(reminder.id)} style={({ pressed }) => [styles.reminderPressable, pressed && styles.reminderPressablePressed]}>
+                        <View style={styles.topRow}>
+                          <View style={styles.content}>
+                            <Text style={styles.title}>{reminder.title}</Text>
+                            <Text style={styles.description}>
+                              {reminder.description ?? "Ei tarkennuksia"}
+                            </Text>
+                          </View>
+                          <Pill
+                            label={reminder.status === "completed" ? "Kuitattu" : reminder.assigneeLabel}
+                            tone={reminder.status === "completed" ? "success" : "brand"}
+                          />
                         </View>
-                        <Pill
-                          label={reminder.status === "completed" ? "Kuitattu" : reminder.assigneeLabel}
-                          tone={reminder.status === "completed" ? "success" : "brand"}
-                        />
-                      </View>
-                      <View style={styles.metaRow}>
-                        <Text style={styles.metaText}>{pet?.name}</Text>
-                        <Text style={styles.metaText}>{formatDueDate(reminder.dueAt)}</Text>
-                      </View>
-                      <View style={styles.cardMetaRow}>
-                        <Pill label={formatReminderType(reminder.type)} tone="neutral" />
-                        <Text style={styles.cardMetaText}>{formatReminderStatus(reminder.status)}</Text>
-                      </View>
-                      {isDetailOpen ? (
-                        <View style={styles.detailCard}>
-                          <Text style={styles.detailLabel}>Lisätiedot</Text>
-                          <View style={styles.detailGrid}>
-                            <DetailItem label="Tyyppi" value={formatReminderType(reminder.type)} />
-                            <DetailItem label="Tila" value={formatReminderStatus(reminder.status)} />
-                            <DetailItem label="Lemmikki" value={pet?.name ?? "-"} />
-                            <DetailItem label="Vastuu" value={reminder.assigneeLabel} />
-                          </View>
-                          <View style={styles.detailBody}>
-                            <Text style={styles.detailSectionLabel}>Kuvaus</Text>
-                            <Text style={styles.detailText}>{reminder.description ?? "Ei tarkennuksia."}</Text>
-                          </View>
-                          <View style={styles.detailBody}>
-                            <Text style={styles.detailSectionLabel}>Ajankohta</Text>
-                            <Text style={styles.detailText}>{formatDueDate(reminder.dueAt)}</Text>
-                          </View>
+                        <View style={styles.metaRow}>
+                          <Text style={styles.metaText}>{pet?.name}</Text>
+                          <Text style={styles.metaText}>{formatDueDate(reminder.dueAt)}</Text>
                         </View>
-                      ) : null}
-                      {reminder.status === "pending" && canManageReminders ? (
+                        <View style={styles.cardMetaRow}>
+                          <Pill label={formatReminderType(reminder.type)} tone="neutral" />
+                          <Text style={styles.cardMetaText}>{formatReminderStatus(reminder.status)}</Text>
+                        </View>
+                      </Pressable>
+                      {reminder.status === "pending" && canManageRemindersAccess ? (
                         <View style={styles.actionRow}>
                           <Pressable
-                            onPress={() => setSelectedReminderId(isDetailOpen ? null : reminder.id)}
+                            onPress={() => setSelectedReminderId(reminder.id)}
                             style={[styles.actionButton, styles.actionButtonNeutral]}
                           >
-                            <Text style={styles.actionLabel}>{isDetailOpen ? "Piilota tiedot" : "Näytä tiedot"}</Text>
+                            <Text style={styles.actionLabel}>Avaa</Text>
                           </Pressable>
                           <Pressable onPress={() => completeReminder(reminder.id)} style={[styles.actionButton, styles.actionButtonPrimary]}>
                             <Text style={[styles.actionLabel, styles.actionLabelPrimary]}>Kuittaa valmiiksi</Text>
@@ -272,10 +354,10 @@ export function RemindersScreen() {
                       {reminder.status !== "pending" ? (
                         <View style={styles.actionRow}>
                           <Pressable
-                            onPress={() => setSelectedReminderId(isDetailOpen ? null : reminder.id)}
+                            onPress={() => setSelectedReminderId(reminder.id)}
                             style={[styles.actionButton, styles.actionButtonNeutral]}
                           >
-                            <Text style={styles.actionLabel}>{isDetailOpen ? "Piilota tiedot" : "Näytä tiedot"}</Text>
+                            <Text style={styles.actionLabel}>Avaa</Text>
                           </Pressable>
                         </View>
                       ) : null}
@@ -287,6 +369,8 @@ export function RemindersScreen() {
           </View>
         );
       })}
+        </>
+      ) : null}
         </>
       ) : null}
     </Screen>
@@ -335,15 +419,6 @@ function formatReminderStatus(value: "pending" | "completed" | "cancelled") {
   }
 }
 
-function DetailItem({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.detailItem}>
-      <Text style={styles.detailItemLabel}>{label}</Text>
-      <Text style={styles.detailItemValue}>{value}</Text>
-    </View>
-  );
-}
-
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.summaryTile}>
@@ -357,7 +432,7 @@ const styles = StyleSheet.create({
   heroCard: {
     gap: spacing[4],
     borderRadius: 28,
-    backgroundColor: "#FCFDFE",
+    backgroundColor: colors.surfaceSoft,
     padding: spacing[6],
     borderWidth: 1,
     borderColor: colors.borderDefault,
@@ -393,7 +468,7 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: spacing[2],
     borderRadius: 20,
-    backgroundColor: "#F7FAFC",
+    backgroundColor: colors.surfaceInfo,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     paddingHorizontal: spacing[4],
@@ -434,7 +509,99 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   reminderCard: {
-    backgroundColor: "#FCFDFE",
+    backgroundColor: colors.surfaceSoft,
+  },
+  reminderPressable: {
+    gap: spacing[1],
+  },
+  reminderPressablePressed: {
+    opacity: 0.8,
+  },
+  detailScreenHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing[3],
+  },
+  detailBackButton: {
+    alignSelf: "flex-start",
+    minHeight: 40,
+    paddingHorizontal: spacing[4],
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    justifyContent: "center",
+  },
+  detailBackLabel: {
+    color: colors.textPrimary,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+  },
+  detailAddButton: {
+    minHeight: 40,
+    paddingHorizontal: spacing[4],
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceAccent,
+    borderWidth: 1,
+    borderColor: colors.borderAccent,
+    justifyContent: "center",
+  },
+  detailAddLabel: {
+    color: colors.brandPrimaryHover,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+  },
+  selectedReminderCard: {
+    backgroundColor: colors.surfaceSoft,
+    gap: spacing[4],
+  },
+  selectedReminderTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing[3],
+  },
+  selectedReminderCopy: {
+    flex: 1,
+    gap: spacing[2],
+  },
+  selectedReminderTitle: {
+    fontSize: typography.size.xl,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
+    letterSpacing: -0.4,
+  },
+  selectedReminderPet: {
+    fontSize: typography.size.md,
+    color: colors.brandPrimaryHover,
+    fontWeight: typography.weight.semibold,
+  },
+  selectedReminderDate: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+  },
+  selectedReminderMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing[3],
+  },
+  selectedReminderMetaText: {
+    color: colors.textSecondary,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.medium,
+  },
+  selectedReminderSection: {
+    gap: spacing[1],
+  },
+  selectedReminderSectionLabel: {
+    color: colors.textTertiary,
+    fontSize: typography.size.sm,
+  },
+  selectedReminderSectionText: {
+    color: colors.textPrimary,
+    fontSize: typography.size.md,
+    lineHeight: 22,
   },
   topRow: {
     flexDirection: "row",
@@ -476,50 +643,6 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     fontWeight: typography.weight.medium,
   },
-  detailCard: {
-    marginTop: spacing[3],
-    gap: spacing[3],
-    borderRadius: 18,
-    backgroundColor: "#F7FAFC",
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    padding: spacing[4],
-  },
-  detailLabel: {
-    color: colors.textPrimary,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-  },
-  detailGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing[3],
-  },
-  detailItem: {
-    width: "47%",
-    gap: spacing[1],
-  },
-  detailItemLabel: {
-    color: colors.textTertiary,
-    fontSize: typography.size.sm,
-  },
-  detailItemValue: {
-    color: colors.textPrimary,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-  },
-  detailBody: {
-    gap: spacing[1],
-  },
-  detailSectionLabel: {
-    color: colors.textTertiary,
-    fontSize: typography.size.sm,
-  },
-  detailText: {
-    color: colors.textSecondary,
-    fontSize: typography.size.sm,
-    lineHeight: 20,
-  },
   actionRow: {
     marginTop: spacing[3],
     flexDirection: "row",
@@ -527,7 +650,7 @@ const styles = StyleSheet.create({
     gap: spacing[3],
     paddingTop: spacing[2],
     borderTopWidth: 1,
-    borderTopColor: "#EEF2F6",
+    borderTopColor: colors.borderDefault,
   },
   actionButton: {
     minHeight: 40,
@@ -537,25 +660,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   actionButtonNeutral: {
-    backgroundColor: "#FCFDFE",
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.borderDefault,
   },
   actionButtonPrimary: {
-    backgroundColor: "#EEF9F6",
+    backgroundColor: colors.surfaceAccent,
     borderWidth: 1,
-    borderColor: "#CFEDEA",
+    borderColor: colors.borderAccent,
   },
   actionButtonDanger: {
-    backgroundColor: "#FFF4F0",
+    backgroundColor: colors.surfaceDanger,
     borderWidth: 1,
-    borderColor: "#F2C9BE",
+    borderColor: colors.borderDanger,
   },
   actionLabelPrimary: {
     color: colors.brandPrimaryHover,
   },
   actionLabelDanger: {
-    color: "#B54708",
+    color: colors.textWarning,
   },
   actionLabel: {
     paddingHorizontal: spacing[4],

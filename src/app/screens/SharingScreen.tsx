@@ -2,11 +2,13 @@ import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { AppButton, Card, EmptyState, InlineMessage, Pill, Screen, SectionTitle, SegmentedControl, TextField } from "../../components/ui";
+import { canManageSharing as hasSharingManagementAccess } from "../../lib/permissions";
 import { useAppStore } from "../../state/appStore";
 import { useBreederStore } from "../../state/breederStore";
 import { usePetStore } from "../../state/petStore";
 import { useSharingStore } from "../../state/sharingStore";
 import { useUpdateStore } from "../../state/updateStore";
+import { useAuthStore } from "../../state/authStore";
 import { colors, spacing, typography } from "../../theme/tokens";
 import type { PetAccess } from "../../types/domain";
 
@@ -19,8 +21,9 @@ export function SharingScreen() {
   const updateAccessPermissions = useSharingStore((state) => state.updateAccessPermissions);
   const addSystemUpdate = useUpdateStore((state) => state.addSystemUpdate);
   const viewerRole = useAppStore((state) => state.viewerRole);
+  const sessionUser = useAuthStore((state) => state.sessionUser);
   const breederAccess = useBreederStore((state) => state.breederAccess);
-  const currentViewerName = viewerRole === "family" ? "Sanna" : viewerRole === "owner" ? "Roni" : null;
+  const currentViewerName = sessionUser?.displayName ?? null;
   const hasFamilyAdminAccess = useMemo(
     () =>
       accesses.some(
@@ -31,7 +34,7 @@ export function SharingScreen() {
       ),
     [accesses, currentViewerName],
   );
-  const canManageSharing = viewerRole === "owner" || (viewerRole === "family" && hasFamilyAdminAccess);
+  const canManageSharing = hasSharingManagementAccess(viewerRole, hasFamilyAdminAccess);
 
   const [selectedPetId, setSelectedPetId] = useState<string>(pets[0]?.id ?? "all");
   const [inviteName, setInviteName] = useState("");
@@ -66,6 +69,7 @@ export function SharingScreen() {
 
     inviteAccess({
       petId: selectedPetId,
+      userId: inviteName.trim(),
       personName: inviteName.trim(),
       role: inviteRole,
     });
@@ -89,8 +93,8 @@ export function SharingScreen() {
     <Screen>
       <View style={styles.heroCard}>
         <Text style={styles.heroEyebrow}>Jaot</Text>
-        <Text style={styles.heroTitle}>Hallitse käyttöoikeuksia rauhassa</Text>
-        <Text style={styles.heroBody}>Kutsu, tarkista ja päivitä jaot yhdestä näkymästä.</Text>
+        <Text style={styles.heroTitle}>Hallitse käyttöoikeuksia</Text>
+        <Text style={styles.heroBody}>Kutsu uusia käyttäjiä ja säädä pääsyjä yhdestä paikasta.</Text>
         <View style={styles.heroSummary}>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryValue}>{familyCount}</Text>
@@ -108,7 +112,7 @@ export function SharingScreen() {
       </View>
 
       <Card>
-        <Text style={styles.sectionTitle}>Kutsu uusi käyttäjä</Text>
+        <Text style={styles.sectionTitle}>Kutsu käyttäjä</Text>
         {canManageSharing ? (
           <View style={styles.form}>
             <SegmentedControl options={petOptions} value={selectedPetId} onChange={setSelectedPetId} />
@@ -120,7 +124,7 @@ export function SharingScreen() {
               value={inviteRole}
               onChange={(value) => setInviteRole(value as "family" | "caretaker")}
             />
-            <TextField label="Nimi" value={inviteName} onChangeText={setInviteName} placeholder="Lisää nimi" />
+            <TextField label="Nimi" value={inviteName} onChangeText={setInviteName} placeholder="Nimi" />
             {inviteError ? <InlineMessage tone="warning" message={inviteError} /> : null}
             {inviteMessage ? <InlineMessage tone="info" message={inviteMessage} /> : null}
             <AppButton label="Lähetä kutsu" onPress={handleInvite} />
@@ -131,7 +135,7 @@ export function SharingScreen() {
               tone="warning"
               message={
                 viewerRole === "family"
-                  ? "Jakojen hallinta tarvitsee perheen ylläpito-oikeuden."
+                  ? "Jakojen muokkaus vaatii perheen ylläpito-oikeuden."
                   : "Tällä roolilla jakoja ei voi muokata."
               }
             />
@@ -177,7 +181,7 @@ export function SharingScreen() {
                   {canManageSharing ? (
                     <>
                     <AppButton
-                      label={expandedAccessId === access.id ? "Piilota tarkemmat oikeudet" : "Muokkaa oikeuksia"}
+                      label={expandedAccessId === access.id ? "Piilota oikeudet" : "Muokkaa oikeuksia"}
                       onPress={() => setExpandedAccessId(expandedAccessId === access.id ? null : access.id)}
                       secondary
                     />
@@ -278,7 +282,7 @@ export function SharingScreen() {
 
 const styles = StyleSheet.create({
   heroCard: {
-    backgroundColor: "#FCFDFE",
+    backgroundColor: colors.surfaceSoft,
     borderRadius: 28,
     padding: spacing[6],
     borderWidth: 1,
@@ -325,7 +329,7 @@ const styles = StyleSheet.create({
   summaryCard: {
     flex: 1,
     borderRadius: 20,
-    backgroundColor: "#F7FAFC",
+    backgroundColor: colors.surfaceInfo,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     padding: spacing[4],
@@ -357,11 +361,11 @@ const styles = StyleSheet.create({
   accessCard: {
     gap: spacing[3],
     borderRadius: 22,
-    backgroundColor: "#FCFDFE",
+    backgroundColor: colors.surfaceSoft,
     padding: spacing[5],
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    shadowColor: "#101828",
+    shadowColor: colors.textPrimary,
     shadowOpacity: 0.04,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
@@ -393,7 +397,7 @@ const styles = StyleSheet.create({
     marginTop: spacing[2],
     paddingTop: spacing[4],
     borderTopWidth: 1,
-    borderTopColor: "#EEF2F6",
+    borderTopColor: colors.borderDefault,
   },
   buttonRow: {
     flexDirection: "row",
@@ -406,7 +410,7 @@ const styles = StyleSheet.create({
   permissionRow: {
     gap: spacing[2],
     borderRadius: 18,
-    backgroundColor: "#F7FAFC",
+    backgroundColor: colors.surfaceInfo,
     padding: spacing[4],
     borderWidth: 1,
     borderColor: colors.borderDefault,

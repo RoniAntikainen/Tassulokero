@@ -2,8 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AppButton, Card, DatePickerField, InlineMessage, MockMediaPreview, PickerField, Screen, SegmentedControl, TextField } from "../../components/ui";
+import {
+  canCreateUpdates,
+  canManageCare,
+  canManageHealth,
+  canManagePets,
+  canManageReminders,
+  getUpdateAuthorRole,
+} from "../../lib/permissions";
 import { getPetPhotoPresetLabel, normalizePetPhotoLabel, pickPetPhoto } from "../../lib/petPhoto";
 import { validateRequired } from "../../lib/validation";
+import { AddActionMenuCard } from "./add/AddActionMenuCard";
+import { AddHealthSections } from "./add/AddHealthSections";
+import { AddReminderSection } from "./add/AddReminderSection";
+import { AddSectionCard } from "./add/AddSectionCard";
+import { AddUpdateSection } from "./add/AddUpdateSection";
 import { useAppStore } from "../../state/appStore";
 import { useCareStore } from "../../state/careStore";
 import { useHealthStore } from "../../state/healthStore";
@@ -11,6 +24,7 @@ import { useMediaStore } from "../../state/mediaStore";
 import { usePetStore } from "../../state/petStore";
 import { useReminderStore } from "../../state/reminderStore";
 import { useUpdateStore } from "../../state/updateStore";
+import { useAuthStore } from "../../state/authStore";
 import { colors, spacing, typography } from "../../theme/tokens";
 
 export function AddScreen({ embedded = false }: { embedded?: boolean }) {
@@ -29,6 +43,7 @@ export function AddScreen({ embedded = false }: { embedded?: boolean }) {
   const addReminder = useReminderStore((state) => state.addReminder);
   const addUpdate = useUpdateStore((state) => state.addUpdate);
   const addSystemUpdate = useUpdateStore((state) => state.addSystemUpdate);
+  const sessionUser = useAuthStore((state) => state.sessionUser);
   const setSelectedPetId = useAppStore((state) => state.setSelectedPetId);
   const setActiveTab = useAppStore((state) => state.setActiveTab);
   const setFlashMessage = useAppStore((state) => state.setFlashMessage);
@@ -94,9 +109,7 @@ export function AddScreen({ embedded = false }: { embedded?: boolean }) {
   const [reminderSuccessMessage, setReminderSuccessMessage] = useState<string | null>(null);
   const [reminderErrorMessage, setReminderErrorMessage] = useState<string | null>(null);
   const [updateText, setUpdateText] = useState("");
-  const [updateAuthorRole, setUpdateAuthorRole] = useState<"owner" | "family" | "caretaker">(
-    viewerRole === "family" ? "family" : viewerRole === "caretaker" ? "caretaker" : "owner",
-  );
+  const [updateAuthorRole, setUpdateAuthorRole] = useState<"owner" | "family" | "caretaker">(getUpdateAuthorRole(viewerRole));
   const [updateSuccessMessage, setUpdateSuccessMessage] = useState<string | null>(null);
   const [updateErrorMessage, setUpdateErrorMessage] = useState<string | null>(null);
   const [mediaLabel, setMediaLabel] = useState("");
@@ -127,11 +140,11 @@ export function AddScreen({ embedded = false }: { embedded?: boolean }) {
         : reminderType === "vet_visit"
           ? "Lisää käynnin tarkennus."
           : "Lyhyt kuvaus";
-  const canManagePets = viewerRole === "owner";
-  const canManageHealth = viewerRole === "owner" || viewerRole === "family";
-  const canManageCare = viewerRole === "owner" || viewerRole === "family";
-  const canManageReminders = viewerRole === "owner" || viewerRole === "family";
-  const canCreateUpdates = viewerRole !== "breeder";
+  const canManagePetsAccess = canManagePets(viewerRole);
+  const canManageHealthAccess = canManageHealth(viewerRole);
+  const canManageCareAccess = canManageCare(viewerRole);
+  const canManageRemindersAccess = canManageReminders(viewerRole);
+  const canCreateUpdatesAccess = canCreateUpdates(viewerRole);
   const reminderPetOptions = useMemo(
     () => pets.map((pet) => ({ label: pet.name, value: pet.id })),
     [pets],
@@ -486,7 +499,7 @@ export function AddScreen({ embedded = false }: { embedded?: boolean }) {
 
     addUpdate({
       petId: targetPet.id,
-      authorName: updateAuthorRole === "caretaker" ? "Emma" : updateAuthorRole === "family" ? "Sanna" : "Roni",
+      authorName: sessionUser?.displayName ?? "Sinä",
       authorRole: updateAuthorRole,
       text: updateText.trim(),
       mediaCount: mediaAttached ? 1 : undefined,
@@ -496,7 +509,7 @@ export function AddScreen({ embedded = false }: { embedded?: boolean }) {
     if (mediaAttached) {
       addMediaItem({
         petId: targetPet.id,
-        authorName: updateAuthorRole === "caretaker" ? "Emma" : updateAuthorRole === "family" ? "Sanna" : "Roni",
+        authorName: sessionUser?.displayName ?? "Sinä",
         sourceLabel: mediaLabel.trim() || "kuva",
       });
     }
@@ -587,7 +600,7 @@ export function AddScreen({ embedded = false }: { embedded?: boolean }) {
   const overlay = (
     <Modal
         visible={overlayVisible}
-        animationType="slide"
+        animationType="none"
         transparent
         onRequestClose={() => setOverlayVisible(false)}
       >
@@ -618,30 +631,20 @@ export function AddScreen({ embedded = false }: { embedded?: boolean }) {
 
             <ScrollView contentContainerStyle={styles.overlayContent} showsVerticalScrollIndicator={false}>
       {overlayMode === "actions" && selectedActionPet ? (
-      <Card>
-        <Text style={styles.formTitle}>Toiminnot</Text>
-        <View style={styles.form}>
-          <Pressable style={styles.actionTile} onPress={() => openSection("pet", selectedActionPet.id)}>
-            <Text style={styles.actionTitle}>Muokkaa perustietoja</Text>
-          </Pressable>
-          <Pressable style={styles.actionTile} onPress={() => openSection("care", selectedActionPet.id)}>
-            <Text style={styles.actionTitle}>Lisää hoito-ohje</Text>
-          </Pressable>
-          <Pressable style={styles.actionTile} onPress={() => openSection("reminders", selectedActionPet.id)}>
-            <Text style={styles.actionTitle}>Lisää muistutus</Text>
-          </Pressable>
-          <Pressable style={styles.actionTile} onPress={() => openSection("updates", selectedActionPet.id)}>
-            <Text style={styles.actionTitle}>Lisää merkintä</Text>
-          </Pressable>
-        </View>
-      </Card>
+        <AddActionMenuCard
+          onEditPet={() => openSection("pet", selectedActionPet.id)}
+          onAddCare={() => openSection("care", selectedActionPet.id)}
+          onAddReminder={() => openSection("reminders", selectedActionPet.id)}
+          onAddUpdate={() => openSection("updates", selectedActionPet.id)}
+        />
       ) : null}
 
       {activeSection === "pet" ? (
-      <Card>
-        <Text style={styles.formTitle}>{isEditingPetBasics ? "Perustiedot" : "Lisää lemmikki"}</Text>
-
-        {canManagePets ? <View style={styles.form}>
+      <AddSectionCard
+        title={isEditingPetBasics ? "Perustiedot" : "Lisää lemmikki"}
+        allowed={canManagePetsAccess}
+        deniedMessage="Lemmikin lisääminen kuuluu omistajalle."
+      >
           <TextField label="Nimi" value={name} onChangeText={setName} placeholder="Lemmikin nimi" />
           <TextField label="Laji" value={species} onChangeText={setSpecies} placeholder="Koira, kissa..." />
           <TextField label="Rotu" value={breed} onChangeText={setBreed} placeholder="Rotu" />
@@ -657,135 +660,90 @@ export function AddScreen({ embedded = false }: { embedded?: boolean }) {
           {successMessage ? <InlineMessage tone="info" message={successMessage} /> : null}
 
           <AppButton label={isEditingPetBasics ? "Tallenna perustiedot" : "Luo lemmikki"} onPress={handleAddPet} />
-        </View> : <View style={styles.form}><InlineMessage tone="warning" message="Lemmikin lisääminen kuuluu omistajalle." /></View>}
-      </Card>
+      </AddSectionCard>
       ) : null}
 
       {overlayMode === "form" && activeSection === "health" ? (
-      <>
-      <Card>
-        <Text style={styles.formTitle}>Lisää rokotus</Text>
-
-        {canManageHealth ? <View style={styles.form}>
-          <TextField label="Rokotteen nimi" value={vaccinationName} onChangeText={setVaccinationName} placeholder="Esim. rabies" />
-          <DatePickerField label="Annettu päivänä" value={vaccinationDate} onChange={setVaccinationDate} yearStart={2010} />
-          <DatePickerField label="Voimassa asti" value={vaccinationValidUntil} onChange={setVaccinationValidUntil} yearStart={2010} />
-          <TextField label="Klinikka" value={vaccinationClinic} onChangeText={setVaccinationClinic} placeholder="Klinikan nimi" />
-          {vaccinationErrorMessage ? <InlineMessage tone="warning" message={vaccinationErrorMessage} /> : null}
-          {vaccinationSuccessMessage ? <InlineMessage tone="info" message={vaccinationSuccessMessage} /> : null}
-          <AppButton label="Tallenna rokotus" onPress={handleAddVaccination} secondary />
-        </View> : <View style={styles.form}><InlineMessage tone="warning" message="Rokotusten hallinta kuuluu omistajalle ja perheelle." /></View>}
-      </Card>
-
-      <Card>
-        <Text style={styles.formTitle}>Lisää lääkitys</Text>
-
-        {canManageHealth ? <View style={styles.form}>
-          <TextField label="Lääkkeen nimi" value={medicationName} onChangeText={setMedicationName} placeholder="Lääkkeen nimi" />
-          <TextField label="Annostus" value={medicationDosage} onChangeText={setMedicationDosage} placeholder="Esim. 1 tabletti" />
-          <TextField
-            label="Ohje"
-            value={medicationInstructions}
-            onChangeText={setMedicationInstructions}
-            placeholder="Kirjoita ohje"
-          />
-          <DatePickerField label="Aloituspäivä" value={medicationStartDate} onChange={setMedicationStartDate} yearStart={2020} />
-          <DatePickerField label="Päättymispäivä" value={medicationEndDate} onChange={setMedicationEndDate} yearStart={2020} />
-          <PickerField
-            label="Tila"
-            value={medicationStatus}
-            onChange={(value) => setMedicationStatus(value as "active" | "completed" | "paused")}
-            options={[
-              { label: "Aktiivinen", value: "active" },
-              { label: "Tauolla", value: "paused" },
-              { label: "Valmis", value: "completed" },
-            ]}
-          />
-          {medicationErrorMessage ? <InlineMessage tone="warning" message={medicationErrorMessage} /> : null}
-          {medicationSuccessMessage ? <InlineMessage tone="info" message={medicationSuccessMessage} /> : null}
-          <AppButton label="Tallenna lääkitys" onPress={handleAddMedication} secondary />
-        </View> : <View style={styles.form}><InlineMessage tone="warning" message="Lääkitysten hallinta kuuluu omistajalle ja perheelle." /></View>}
-      </Card>
-
-      <Card>
-        <Text style={styles.formTitle}>Lisää eläinlääkärikäynti</Text>
-
-        {canManageHealth ? <View style={styles.form}>
-          <DatePickerField label="Käyntipäivä" value={visitDate} onChange={setVisitDate} yearStart={2020} />
-          <TextField label="Klinikka" value={visitClinic} onChangeText={setVisitClinic} placeholder="Klinikan nimi" />
-          <TextField label="Eläinlääkäri" value={visitVeterinarian} onChangeText={setVisitVeterinarian} placeholder="Eläinlääkärin nimi" />
-          <TextField label="Syy" value={visitReason} onChangeText={setVisitReason} placeholder="Miksi käynti tehtiin" />
-          <TextField label="Yhteenveto" value={visitSummary} onChangeText={setVisitSummary} placeholder="Lyhyt yhteenveto käynnistä" />
-          <DatePickerField label="Jatkokäynnin päivä" value={visitFollowUpDate} onChange={setVisitFollowUpDate} yearStart={2020} />
-          {visitErrorMessage ? <InlineMessage tone="warning" message={visitErrorMessage} /> : null}
-          {visitSuccessMessage ? <InlineMessage tone="info" message={visitSuccessMessage} /> : null}
-          <AppButton label="Tallenna käynti" onPress={handleAddVetVisit} secondary />
-        </View> : <View style={styles.form}><InlineMessage tone="warning" message="Käyntien hallinta kuuluu omistajalle ja perheelle." /></View>}
-      </Card>
-
-      <Card>
-        <Text style={styles.formTitle}>Lisää vakuutustieto</Text>
-
-        {canManageHealth ? <View style={styles.form}>
-          <TextField label="Vakuutusyhtiö" value={insuranceProviderName} onChangeText={setInsuranceProviderName} placeholder="Yhtiön nimi" />
-          <TextField label="Poliisinumero" value={insurancePolicyNumber} onChangeText={setInsurancePolicyNumber} placeholder="Vakuutusnumero" />
-          <PickerField
-            label="Vakuutustyyppi"
-            value={insuranceCoverageType}
-            onChange={(value) => setInsuranceCoverageType(value as "health" | "life" | "health_and_life" | "other")}
-            options={[
-              { label: "Sairaus", value: "health" },
-              { label: "Henki", value: "life" },
-              { label: "Molemmat", value: "health_and_life" },
-              { label: "Muu", value: "other" },
-            ]}
-          />
-          <TextField label="Omavastuu" value={insuranceDeductibleLabel} onChangeText={setInsuranceDeductibleLabel} placeholder="Esim. 100 €" />
-          <DatePickerField label="Voimassa alkaen" value={insuranceValidFrom} onChange={setInsuranceValidFrom} yearStart={2020} />
-          <DatePickerField label="Voimassa asti" value={insuranceValidUntil} onChange={setInsuranceValidUntil} yearStart={2020} />
-          <TextField label="Yhteysnumero" value={insuranceContactPhone} onChangeText={setInsuranceContactPhone} placeholder="Puhelinnumero" />
-          <TextField label="Muistiinpanot" value={insuranceNotes} onChangeText={setInsuranceNotes} placeholder="Lisätiedot" />
-          {insuranceErrorMessage ? <InlineMessage tone="warning" message={insuranceErrorMessage} /> : null}
-          {insuranceSuccessMessage ? <InlineMessage tone="info" message={insuranceSuccessMessage} /> : null}
-          <AppButton label="Tallenna vakuutustieto" onPress={handleAddInsuranceRecord} secondary />
-        </View> : <View style={styles.form}><InlineMessage tone="warning" message="Vakuutustietojen hallinta kuuluu omistajalle ja perheelle." /></View>}
-      </Card>
-
-      <Card>
-        <Text style={styles.formTitle}>Lisää terveystieto</Text>
-
-        {canManageHealth ? <View style={styles.form}>
-          <PickerField
-            label="Terveystiedon tyyppi"
-            value={healthType}
-            onChange={(value) => setHealthType(value as "allergy" | "chronic_condition" | "diet_note" | "behaviour_note" | "other")}
-            options={[
-              { label: "Muu", value: "other" },
-              { label: "Krooninen", value: "chronic_condition" },
-              { label: "Allergia", value: "allergy" },
-              { label: "Ruokahuomio", value: "diet_note" },
-            ]}
-          />
-          <TextField label="Otsikko" value={healthTitle} onChangeText={setHealthTitle} placeholder="Otsikoi merkintä" />
-          <TextField
-            label="Sisältö"
-            value={healthContent}
-            onChangeText={setHealthContent}
-            placeholder="Kirjoita lisätiedot"
-          />
-          {healthErrorMessage ? <InlineMessage tone="warning" message={healthErrorMessage} /> : null}
-          {healthSuccessMessage ? <InlineMessage tone="info" message={healthSuccessMessage} /> : null}
-          <AppButton label="Tallenna terveystieto" onPress={handleAddHealthNote} secondary />
-        </View> : <View style={styles.form}><InlineMessage tone="warning" message="Terveystietojen hallinta kuuluu omistajalle ja perheelle." /></View>}
-      </Card>
-      </>
+        <AddHealthSections
+          allowed={canManageHealthAccess}
+          vaccinationName={vaccinationName}
+          setVaccinationName={setVaccinationName}
+          vaccinationDate={vaccinationDate}
+          setVaccinationDate={setVaccinationDate}
+          vaccinationValidUntil={vaccinationValidUntil}
+          setVaccinationValidUntil={setVaccinationValidUntil}
+          vaccinationClinic={vaccinationClinic}
+          setVaccinationClinic={setVaccinationClinic}
+          vaccinationErrorMessage={vaccinationErrorMessage}
+          vaccinationSuccessMessage={vaccinationSuccessMessage}
+          onAddVaccination={handleAddVaccination}
+          medicationName={medicationName}
+          setMedicationName={setMedicationName}
+          medicationDosage={medicationDosage}
+          setMedicationDosage={setMedicationDosage}
+          medicationInstructions={medicationInstructions}
+          setMedicationInstructions={setMedicationInstructions}
+          medicationStartDate={medicationStartDate}
+          setMedicationStartDate={setMedicationStartDate}
+          medicationEndDate={medicationEndDate}
+          setMedicationEndDate={setMedicationEndDate}
+          medicationStatus={medicationStatus}
+          setMedicationStatus={setMedicationStatus}
+          medicationErrorMessage={medicationErrorMessage}
+          medicationSuccessMessage={medicationSuccessMessage}
+          onAddMedication={handleAddMedication}
+          visitDate={visitDate}
+          setVisitDate={setVisitDate}
+          visitClinic={visitClinic}
+          setVisitClinic={setVisitClinic}
+          visitVeterinarian={visitVeterinarian}
+          setVisitVeterinarian={setVisitVeterinarian}
+          visitReason={visitReason}
+          setVisitReason={setVisitReason}
+          visitSummary={visitSummary}
+          setVisitSummary={setVisitSummary}
+          visitFollowUpDate={visitFollowUpDate}
+          setVisitFollowUpDate={setVisitFollowUpDate}
+          visitErrorMessage={visitErrorMessage}
+          visitSuccessMessage={visitSuccessMessage}
+          onAddVetVisit={handleAddVetVisit}
+          insuranceProviderName={insuranceProviderName}
+          setInsuranceProviderName={setInsuranceProviderName}
+          insurancePolicyNumber={insurancePolicyNumber}
+          setInsurancePolicyNumber={setInsurancePolicyNumber}
+          insuranceCoverageType={insuranceCoverageType}
+          setInsuranceCoverageType={setInsuranceCoverageType}
+          insuranceDeductibleLabel={insuranceDeductibleLabel}
+          setInsuranceDeductibleLabel={setInsuranceDeductibleLabel}
+          insuranceValidFrom={insuranceValidFrom}
+          setInsuranceValidFrom={setInsuranceValidFrom}
+          insuranceValidUntil={insuranceValidUntil}
+          setInsuranceValidUntil={setInsuranceValidUntil}
+          insuranceContactPhone={insuranceContactPhone}
+          setInsuranceContactPhone={setInsuranceContactPhone}
+          insuranceNotes={insuranceNotes}
+          setInsuranceNotes={setInsuranceNotes}
+          insuranceErrorMessage={insuranceErrorMessage}
+          insuranceSuccessMessage={insuranceSuccessMessage}
+          onAddInsuranceRecord={handleAddInsuranceRecord}
+          healthType={healthType}
+          setHealthType={setHealthType}
+          healthTitle={healthTitle}
+          setHealthTitle={setHealthTitle}
+          healthContent={healthContent}
+          setHealthContent={setHealthContent}
+          healthErrorMessage={healthErrorMessage}
+          healthSuccessMessage={healthSuccessMessage}
+          onAddHealthNote={handleAddHealthNote}
+        />
       ) : null}
 
       {overlayMode === "form" && activeSection === "care" ? (
-      <Card>
-        <Text style={styles.formTitle}>Lisää hoito-ohje</Text>
-
-        {canManageCare ? <View style={styles.form}>
+      <AddSectionCard
+        title="Lisää hoito-ohje"
+        allowed={canManageCareAccess}
+        deniedMessage="Hoito-ohjeiden hallinta kuuluu omistajalle ja perheelle."
+      >
           <PickerField
             label="Ohjeen tyyppi"
             value={careType}
@@ -808,96 +766,53 @@ export function AddScreen({ embedded = false }: { embedded?: boolean }) {
           {careErrorMessage ? <InlineMessage tone="warning" message={careErrorMessage} /> : null}
           {careSuccessMessage ? <InlineMessage tone="info" message={careSuccessMessage} /> : null}
           <AppButton label="Tallenna hoito-ohje" onPress={handleAddCareInstruction} secondary />
-        </View> : <View style={styles.form}><InlineMessage tone="warning" message="Hoito-ohjeiden hallinta kuuluu omistajalle ja perheelle." /></View>}
-      </Card>
+      </AddSectionCard>
       ) : null}
 
       {overlayMode === "form" && activeSection === "reminders" ? (
-      <Card>
-        <Text style={styles.formTitle}>Luo muistutus</Text>
-
-        {canManageReminders ? <View style={styles.form}>
-          {pets.length > 1 ? (
-            <PickerField
-              label="Lemmikki"
-              value={reminderPetId || pets[0]?.id || ""}
-              onChange={setReminderPetId}
-              options={reminderPetOptions}
-            />
-          ) : null}
-          <PickerField
-            label="Muistutuksen tyyppi"
-            value={reminderType}
-            onChange={(value) => setReminderType(value as "manual" | "vaccination" | "medication" | "vet_visit")}
-            options={[
-              { label: "Yleinen", value: "manual" },
-              { label: "Rokotus", value: "vaccination" },
-              { label: "Lääkitys", value: "medication" },
-              { label: "Käynti", value: "vet_visit" },
-            ]}
-          />
-          <TextField label="Otsikko" value={reminderTitle} onChangeText={setReminderTitle} placeholder={reminderTitlePlaceholder} />
-          <DatePickerField label="Ajankohta" value={reminderDueAt} onChange={setReminderDueAt} yearStart={2024} />
-          <Pressable onPress={() => setShowReminderOptional((value) => !value)} style={styles.inlineToggle}>
-            <Text style={styles.inlineToggleLabel}>{showReminderOptional ? "Piilota lisätiedot" : "Lisää tarkennus"}</Text>
-          </Pressable>
-          {showReminderOptional ? (
-            <TextField
-              label="Kuvaus"
-              value={reminderDescription}
-              onChangeText={setReminderDescription}
-              placeholder={reminderDescriptionPlaceholder}
-            />
-          ) : null}
-          {reminderErrorMessage ? <InlineMessage tone="warning" message={reminderErrorMessage} /> : null}
-          {reminderSuccessMessage ? <InlineMessage tone="info" message={reminderSuccessMessage} /> : null}
-          <AppButton label="Tallenna muistutus" onPress={handleAddReminder} />
-        </View> : <View style={styles.form}><InlineMessage tone="warning" message="Muistutusten luonti kuuluu omistajalle ja perheelle." /></View>}
-      </Card>
+        <AddReminderSection
+          allowed={canManageRemindersAccess}
+          petsCount={pets.length}
+          reminderPetId={reminderPetId || pets[0]?.id || ""}
+          setReminderPetId={setReminderPetId}
+          reminderPetOptions={reminderPetOptions}
+          reminderType={reminderType}
+          setReminderType={setReminderType}
+          reminderTitle={reminderTitle}
+          setReminderTitle={setReminderTitle}
+          reminderTitlePlaceholder={reminderTitlePlaceholder}
+          reminderDueAt={reminderDueAt}
+          setReminderDueAt={setReminderDueAt}
+          showReminderOptional={showReminderOptional}
+          setShowReminderOptional={setShowReminderOptional}
+          reminderDescription={reminderDescription}
+          setReminderDescription={setReminderDescription}
+          reminderDescriptionPlaceholder={reminderDescriptionPlaceholder}
+          reminderErrorMessage={reminderErrorMessage}
+          reminderSuccessMessage={reminderSuccessMessage}
+          onAddReminder={handleAddReminder}
+        />
       ) : null}
 
       {overlayMode === "form" && activeSection === "updates" ? (
-      <Card>
-        <Text style={styles.formTitle}>Lisää merkintä</Text>
-
-        {canCreateUpdates ? <View style={styles.form}>
-          <TextField
-            label="Päivitys"
-            value={updateText}
-            onChangeText={setUpdateText}
-            placeholder="Kirjoita päivitys"
-          />
-          <Pressable onPress={() => setShowUpdateOptional((value) => !value)} style={styles.inlineToggle}>
-            <Text style={styles.inlineToggleLabel}>{showUpdateOptional ? "Piilota lisätiedot" : "Lisää kuva tai tarkennus"}</Text>
-          </Pressable>
-          {showUpdateOptional ? (
-            <>
-              <TextField
-                label="Kuvan tiedostonimi"
-                value={mediaLabel}
-                onChangeText={setMediaLabel}
-                placeholder="Esim. ulkoiluhetki"
-              />
-              <PickerField
-                label="Kirjoittaja"
-                value={updateAuthorRole}
-                onChange={(value) => setUpdateAuthorRole(value as "owner" | "family" | "caretaker")}
-                options={[
-                  { label: "Omistaja", value: "owner" },
-                  { label: "Perhe", value: "family" },
-                  { label: "Hoitaja", value: "caretaker" },
-                ]}
-              />
-              <AppButton label={mediaAttached ? "Kuva valittu" : "Valitse kuva"} onPress={handleMockPickMedia} secondary />
-            </>
-          ) : null}
-          {mediaErrorMessage ? <InlineMessage tone="warning" message={mediaErrorMessage} /> : null}
-          {mediaSuccessMessage ? <InlineMessage tone="info" message={mediaSuccessMessage} /> : null}
-          {updateErrorMessage ? <InlineMessage tone="warning" message={updateErrorMessage} /> : null}
-          {updateSuccessMessage ? <InlineMessage tone="info" message={updateSuccessMessage} /> : null}
-          <AppButton label="Tallenna päivitys" onPress={handleAddUpdate} secondary />
-        </View> : <View style={styles.form}><InlineMessage tone="warning" message="Kasvattaja ei voi lisätä merkintöjä tästä näkymästä." /></View>}
-      </Card>
+        <AddUpdateSection
+          allowed={canCreateUpdatesAccess}
+          updateText={updateText}
+          setUpdateText={setUpdateText}
+          showUpdateOptional={showUpdateOptional}
+          setShowUpdateOptional={setShowUpdateOptional}
+          mediaLabel={mediaLabel}
+          setMediaLabel={setMediaLabel}
+          updateAuthorRole={updateAuthorRole}
+          setUpdateAuthorRole={setUpdateAuthorRole}
+          mediaAttached={mediaAttached}
+          onPickMedia={handleMockPickMedia}
+          mediaErrorMessage={mediaErrorMessage}
+          mediaSuccessMessage={mediaSuccessMessage}
+          updateErrorMessage={updateErrorMessage}
+          updateSuccessMessage={updateSuccessMessage}
+          onAddUpdate={handleAddUpdate}
+        />
       ) : null}
             </ScrollView>
           </View>
@@ -917,7 +832,7 @@ export function AddScreen({ embedded = false }: { embedded?: boolean }) {
       >
         <View style={styles.heroCard}>
           <Text style={styles.heroEyebrow}>Lisää</Text>
-          <Text style={styles.heroTitle}>Valitse lemmikki</Text>
+          <Text style={styles.heroTitle}>Valitse lemmikki tai lisää uusi</Text>
         </View>
 
         <Card style={styles.contentCard}>
@@ -953,7 +868,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[8],
   },
   heroCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     borderRadius: 28,
     padding: spacing[6],
     borderWidth: 1,
@@ -975,7 +890,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
   },
   contentCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
   },
   petGrid: {
     marginTop: spacing[4],
@@ -987,7 +902,7 @@ const styles = StyleSheet.create({
     width: "48%",
     minHeight: 144,
     borderRadius: 22,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     padding: spacing[4],
@@ -1037,7 +952,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[5],
     paddingVertical: spacing[5],
     borderRadius: 20,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.borderDefault,
   },
@@ -1083,7 +998,7 @@ const styles = StyleSheet.create({
   },
   overlayBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(20, 28, 38, 0.28)",
+    backgroundColor: colors.overlayScrimSoft,
     justifyContent: "flex-end",
   },
   overlayDismissArea: {
@@ -1091,7 +1006,7 @@ const styles = StyleSheet.create({
   },
   overlaySheet: {
     maxHeight: "90%",
-    backgroundColor: "#F3F4F6",
+    backgroundColor: colors.surfaceMuted,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     paddingHorizontal: spacing[5],
@@ -1140,7 +1055,7 @@ const styles = StyleSheet.create({
     gap: spacing[4],
     padding: spacing[5],
     borderRadius: 20,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.borderDefault,
   },
@@ -1150,7 +1065,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
   },
   previewCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     borderRadius: 20,
     padding: spacing[5],
     borderWidth: 1,

@@ -14,13 +14,17 @@ import {
   TextField,
 } from "../../components/ui";
 import { formatDueDate } from "../../lib/date";
+import { searchUsersByDisplayName } from "../../lib/db";
+import { canManageHeat, canManageHealth, canManagePetProfile, canManageReminders, canManageSharing as hasSharingManagementAccess } from "../../lib/permissions";
 import { colors, radii, spacing, typography } from "../../theme/tokens";
 import { useAppStore } from "../../state/appStore";
+import { useAuthStore } from "../../state/authStore";
 import { useBreederStore } from "../../state/breederStore";
 import { useHealthStore } from "../../state/healthStore";
 import { getReminderGroup, useReminderStore } from "../../state/reminderStore";
 import { usePetStore } from "../../state/petStore";
 import { useSharingStore } from "../../state/sharingStore";
+import { useUpdateStore } from "../../state/updateStore";
 import { HeatCycleRecord, Pet, PetSection, Reminder, VaccinationRecord } from "../../types/domain";
 
 const baseSectionOptions: { label: string; value: PetSection }[] = [
@@ -39,7 +43,7 @@ function isFemalePet(sex?: string) {
 
 function formatDateLabel(value?: string) {
   if (!value) {
-    return "Ei asetettu";
+    return "Puuttuu";
   }
 
   const date = new Date(value);
@@ -56,7 +60,7 @@ function formatDateLabel(value?: string) {
 
 function formatShortDate(value?: string) {
   if (!value) {
-    return "Ei asetettu";
+    return "Puuttuu";
   }
 
   const date = new Date(value);
@@ -205,8 +209,14 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
   const selectedPetSection = useAppStore((state) => state.selectedPetSection);
   const setSelectedPetSection = useAppStore((state) => state.setSelectedPetSection);
   const viewerRole = useAppStore((state) => state.viewerRole);
+  const sessionUser = useAuthStore((state) => state.sessionUser);
   const updatePet = usePetStore((state) => state.updatePet);
   const sharing = useSharingStore((state) => state.accesses).filter((item) => item.petId === pet.id);
+  const inviteAccess = useSharingStore((state) => state.inviteAccess);
+  const toggleFamilyAdmin = useSharingStore((state) => state.toggleFamilyAdmin);
+  const removeAccess = useSharingStore((state) => state.removeAccess);
+  const updateAccessPermissions = useSharingStore((state) => state.updateAccessPermissions);
+  const addSystemUpdate = useUpdateStore((state) => state.addSystemUpdate);
   const reminders = useReminderStore((state) => state.reminders).filter((item) => item.petId === pet.id);
   const addReminder = useReminderStore((state) => state.addReminder);
   const completeReminder = useReminderStore((state) => state.completeReminder);
@@ -243,6 +253,9 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
   const nextHeatDays = nextHeatStart ? differenceInDays(nextHeatStart) : null;
   const pendingReminders = sortedReminders.filter((item) => item.status === "pending");
   const overdueReminders = pendingReminders.filter((item) => getReminderGroup(item) === "overdue");
+  const currentViewerName = sessionUser?.displayName ?? null;
+  const hasFamilyAdminAccess = sharing.some((access) => access.role === "family" && access.isAdmin && access.personName === currentViewerName);
+  const canManageSharingAccess = hasSharingManagementAccess(viewerRole, hasFamilyAdminAccess);
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
@@ -257,10 +270,10 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
   const [isNeutered, setIsNeutered] = useState(pet.isNeutered ? "yes" : "no");
   const [notes, setNotes] = useState(pet.notes ?? "");
 
-  const canManagePet = viewerRole === "owner" || viewerRole === "family";
-  const canManageHealth = viewerRole === "owner" || viewerRole === "family";
-  const canManageReminders = viewerRole === "owner" || viewerRole === "family";
-  const canManageHeat = viewerRole === "owner" || viewerRole === "family" || viewerRole === "breeder";
+  const canManagePet = canManagePetProfile(viewerRole);
+  const canManageHealthAccess = canManageHealth(viewerRole);
+  const canManageRemindersAccess = canManageReminders(viewerRole);
+  const canManageHeatAccess = canManageHeat(viewerRole);
   const heatTrackingEnabled = isFemalePet(pet.sex) || isFemalePet(sex);
   const sectionOptions = heatTrackingEnabled ? [...baseSectionOptions.slice(0, 3), heatSectionOption, baseSectionOptions[3]] : baseSectionOptions;
 
@@ -281,6 +294,14 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
   const [heatStartDate, setHeatStartDate] = useState("");
   const [heatEndDate, setHeatEndDate] = useState("");
   const [heatNotes, setHeatNotes] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [inviteUserId, setInviteUserId] = useState<string | null>(null);
+  const [inviteRole, setInviteRole] = useState<"family" | "caretaker">("family");
+  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [userSuggestions, setUserSuggestions] = useState<Array<{ id: string; display_name: string | null; email: string | null }>>([]);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+  const [expandedAccessId, setExpandedAccessId] = useState<string | null>(null);
 
   function saveProfile() {
     const nextName = name.trim();
@@ -321,7 +342,7 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
       setSelectedPetSection("overview");
     }
 
-    setProfileMessage("Lemmikin profiili päivitettiin.");
+    setProfileMessage("Profiili tallennettu.");
     setIsEditingProfile(false);
   }
 
@@ -365,7 +386,7 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
         validUntil: vaccinationValidUntil.trim() || undefined,
         clinicName: vaccinationClinic.trim() || undefined,
       });
-      setVaccinationMessage("Rokotemerkintä päivitettiin.");
+      setVaccinationMessage("Rokotus päivitetty.");
     } else {
       addVaccination({
         petId: pet.id,
@@ -374,26 +395,76 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
         validUntil: vaccinationValidUntil.trim() || undefined,
         clinicName: vaccinationClinic.trim() || undefined,
       });
-      setVaccinationMessage("Rokotus lisättiin.");
+      setVaccinationMessage("Rokotus lisätty.");
     }
 
     clearVaccinationForm();
   }
 
+  function handleInviteAccess() {
+    if (!inviteUserId || !inviteName.trim()) {
+      setInviteError("Valitse käyttäjä ehdotuksista.");
+      setInviteMessage(null);
+      return;
+    }
+
+    inviteAccess({
+      petId: pet.id,
+      userId: inviteUserId,
+      personName: inviteName.trim(),
+      role: inviteRole,
+    });
+    addSystemUpdate(
+      pet.id,
+      inviteRole === "family"
+        ? `Perhekutsu lähetettiin henkilölle ${inviteName.trim()}.`
+        : `Hoitajakutsu lähetettiin henkilölle ${inviteName.trim()}.`,
+    );
+
+    setInviteName("");
+    setInviteUserId(null);
+    setInviteError(null);
+    setUserSuggestions([]);
+    setInviteMessage(inviteRole === "family" ? "Perhekutsu lähetettiin." : "Hoitajakutsu lähetettiin.");
+  }
+
+  async function handleInviteNameChange(value: string) {
+    setInviteName(value);
+    setInviteUserId(null);
+    setInviteMessage(null);
+
+    const normalizedValue = value.trim();
+    if (normalizedValue.length < 2) {
+      setUserSuggestions([]);
+      return;
+    }
+
+    setIsSearchingUsers(true);
+    try {
+      const results = await searchUsersByDisplayName(normalizedValue, sessionUser?.dbUserId);
+      const existingIds = new Set(sharing.map((access) => access.userId));
+      setUserSuggestions(results.filter((item: { id: string }) => !existingIds.has(item.id)));
+    } catch {
+      setUserSuggestions([]);
+    } finally {
+      setIsSearchingUsers(false);
+    }
+  }
+
   function createVaccinationReminder(record: VaccinationRecord) {
     if (!record.validUntil) {
-      setVaccinationMessage("Lisää ensin rokotteelle voimassaolo, jotta muistutus voidaan luoda.");
+      setVaccinationMessage("Lisää rokotukselle voimassaolo ennen muistutusta.");
       return;
     }
 
     addReminder({
       petId: pet.id,
       title: `${record.vaccineName}: varaa tehoste`,
-      description: "Tarkista rokotteen uusinta eläinlääkäriltä.",
+      description: "Tarkista tehosteen tarve eläinlääkäriltä.",
       dueAt: toDueAt(record.validUntil),
       type: "vaccination",
     });
-    setVaccinationMessage("Rokotemuistutus luotiin.");
+    setVaccinationMessage("Rokotusmuistutus lisätty.");
   }
 
   function addManualReminder() {
@@ -419,7 +490,7 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
     setReminderDescription("");
     setReminderDueDate("");
     setReminderType("manual");
-    setReminderMessage("Muistutus lisättiin.");
+    setReminderMessage("Muistutus lisätty.");
   }
 
   function addHeatCycleRecord() {
@@ -448,7 +519,7 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
     setHeatStartDate("");
     setHeatEndDate("");
     setHeatNotes("");
-    setHeatMessage("Juoksumerkintä tallennettiin.");
+    setHeatMessage("Juoksu tallennettu.");
   }
 
   return (
@@ -476,22 +547,20 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
           </View>
           <View style={styles.summaryTile}>
             <Text style={styles.summaryLabel}>Paino</Text>
-            <Text style={styles.summaryValue}>{pet.weightKg ? `${pet.weightKg} kg` : "Lisää tieto"}</Text>
+            <Text style={styles.summaryValue}>{pet.weightKg ? `${pet.weightKg} kg` : "Puuttuu"}</Text>
           </View>
           <View style={styles.summaryTile}>
             <Text style={styles.summaryLabel}>Muistutukset</Text>
             <Text style={styles.summaryValue}>{pendingReminders.length}</Text>
           </View>
-          <View style={styles.summaryTile}>
-            <Text style={styles.summaryLabel}>Seuraava juoksu</Text>
-            <Text style={styles.summaryValue}>
-              {pet.sex?.toLowerCase().includes("female") || pet.sex?.toLowerCase().includes("tyttö")
-                ? nextHeatStart
-                  ? formatShortDate(nextHeatStart)
-                  : "Laskeutuu kun dataa on"
-                : "Ei käytössä"}
-            </Text>
-          </View>
+          {heatTrackingEnabled ? (
+            <View style={styles.summaryTile}>
+              <Text style={styles.summaryLabel}>Seuraava juoksu</Text>
+              <Text style={styles.summaryValue}>
+                {nextHeatStart ? formatShortDate(nextHeatStart) : "Arvio tulee, kun dataa on"}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {overdueReminders.length ? (
@@ -509,11 +578,11 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
           {!isEditingProfile ? (
             <>
               <View style={styles.infoGrid}>
-                <InfoItem label="Syntymäaika" value={pet.birthDate ? formatDateLabel(pet.birthDate) : "Ei asetettu"} />
-                <InfoItem label="Sukupuoli" value={pet.sex ?? "Ei asetettu"} />
-                <InfoItem label="Siru" value={pet.chipId ?? "Ei asetettu"} />
-                <InfoItem label="Steriloitu / kastroitu" value={pet.isNeutered ? "Kyllä" : "Ei / ei tiedossa"} />
-                <InfoItem label="Väri / tunnisteet" value={pet.colorMarkings ?? "Ei asetettu"} />
+                <InfoItem label="Syntymäaika" value={pet.birthDate ? formatDateLabel(pet.birthDate) : "Puuttuu"} />
+                <InfoItem label="Sukupuoli" value={pet.sex ?? "Puuttuu"} />
+                <InfoItem label="Siru" value={pet.chipId ?? "Puuttuu"} />
+                <InfoItem label="Steriloitu / kastroitu" value={pet.isNeutered ? "Kyllä" : "Ei tiedossa"} />
+                <InfoItem label="Väri / tunnisteet" value={pet.colorMarkings ?? "Puuttuu"} />
                 <InfoItem label="Muistiinpanot" value={pet.notes ?? "Ei lisätty"} />
               </View>
               {canManagePet ? <AppButton label="Muokkaa profiilia" onPress={() => setIsEditingProfile(true)} /> : null}
@@ -583,7 +652,7 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
                     {record.validUntil ? (
                       <Text style={styles.cardBodyText}>Voimassa asti {formatShortDate(record.validUntil)}</Text>
                     ) : null}
-                    {canManageHealth ? (
+                    {canManageHealthAccess ? (
                       <View style={styles.actionRow}>
                         <ActionLink label="Muokkaa" onPress={() => startVaccinationEdit(record)} />
                         <ActionLink label="Luo muistutus" onPress={() => createVaccinationReminder(record)} />
@@ -597,11 +666,11 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
           ) : (
             <EmptyState
               title="Ei rokotuksia vielä"
-              message="Lisää rokotemerkinnät tänne, niin niiden voimassaolo ja uusimiset pysyvät seurannassa."
+              message="Lisää rokotukset tänne, niin voimassaolo ja uusinnat pysyvät seurannassa."
             />
           )}
 
-          {canManageHealth ? (
+          {canManageHealthAccess ? (
             <View style={styles.formCard}>
               <Text style={styles.formTitle}>{editingVaccinationId ? "Muokkaa rokotetta" : "Lisää rokotus"}</Text>
               <View style={styles.formStack}>
@@ -670,7 +739,7 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
                     </View>
                     {record.description ? <Text style={styles.cardBodyText}>{record.description}</Text> : null}
                     <Text style={styles.cardMetaText}>Tyyppi: {record.type}</Text>
-                    {canManageReminders && record.status === "pending" ? (
+                    {canManageRemindersAccess && record.status === "pending" ? (
                       <View style={styles.actionRow}>
                         <ActionLink label="Merkitse tehdyksi" onPress={() => completeReminder(record.id)} />
                         <ActionLink label="Peruuta" danger onPress={() => cancelReminder(record.id)} />
@@ -687,7 +756,7 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
             />
           )}
 
-          {canManageReminders ? (
+          {canManageRemindersAccess ? (
             <View style={styles.formCard}>
               <Text style={styles.formTitle}>Lisää muistutus</Text>
               <View style={styles.formStack}>
@@ -731,7 +800,7 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
                       ? nextHeatDays !== null && nextHeatDays >= 0
                         ? `${formatShortDate(nextHeatStart)} (${nextHeatDays} pv)`
                         : `${formatShortDate(nextHeatStart)}`
-                      : "Lisää vähintään yksi merkintä"
+                      : "Lisää ensimmäinen merkintä"
                   }
                 />
               </View>
@@ -744,7 +813,7 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
                         <View style={styles.listHeaderCopy}>
                           <Text style={styles.listTitle}>Juoksu alkoi {formatShortDate(cycle.startDate)}</Text>
                           <Text style={styles.listMeta}>
-                            {cycle.endDate ? `Päättyi ${formatShortDate(cycle.endDate)}` : "Päättymispäivää ei lisätty"}
+                            {cycle.endDate ? `Päättyi ${formatShortDate(cycle.endDate)}` : "Päättymispäivä puuttuu"}
                           </Text>
                         </View>
                       </View>
@@ -755,17 +824,17 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
               ) : (
                 <EmptyState
                   title="Ei juoksumerkintöjä"
-                  message="Kun lisäät ensimmäiset juoksut, appi voi arvioida seuraavan ajankohdan aiemman rytmin perusteella."
+                  message="Kun lisäät ensimmäiset merkinnät, arvio seuraavasta juoksusta näkyy täällä."
                 />
               )}
 
-              {canManageHeat ? (
+              {canManageHeatAccess ? (
                 <View style={styles.formCard}>
                   <Text style={styles.formTitle}>Lisää juoksumerkintä</Text>
                   <View style={styles.formStack}>
                     <DatePickerField label="Alkamispäivä" value={heatStartDate} onChange={setHeatStartDate} yearStart={2020} />
                     <DatePickerField label="Päättymispäivä" value={heatEndDate} onChange={setHeatEndDate} yearStart={2020} />
-                    <TextField label="Muistiinpanot" value={heatNotes} onChangeText={setHeatNotes} placeholder="Esim. oireet tai huomioita" />
+                    <TextField label="Muistiinpanot" value={heatNotes} onChangeText={setHeatNotes} placeholder="Esim. oireet tai huomiot" />
                     <AppButton label="Tallenna juoksu" onPress={addHeatCycleRecord} />
                   </View>
                 </View>
@@ -777,25 +846,133 @@ export function PetDetailCard({ pet }: { pet: Pet }) {
       {selectedPetSection === "sharing" ? (
         <Card style={styles.sectionCard}>
           <SectionTitle title="Jaetut oikeudet" actionLabel={sharing.length ? `${sharing.length} henkilöä` : "Vain omistaja"} />
+
+          {canManageSharingAccess ? (
+            <View style={styles.formCard}>
+              <Text style={styles.formTitle}>Kutsu käyttäjä</Text>
+              <View style={styles.formStack}>
+                <SegmentedControl
+                  options={[
+                    { label: "Perhe", value: "family" },
+                    { label: "Hoitaja", value: "caretaker" },
+                  ]}
+                  value={inviteRole}
+                  onChange={(value) => setInviteRole(value as "family" | "caretaker")}
+                />
+                <TextField label="Käyttäjä" value={inviteName} onChangeText={handleInviteNameChange} placeholder="Hae nimellä" />
+                {userSuggestions.length ? (
+                  <View style={styles.suggestionList}>
+                    {userSuggestions.map((user) => (
+                      <Pressable
+                        key={user.id}
+                        onPress={() => {
+                          setInviteUserId(user.id);
+                          setInviteName(user.display_name ?? user.email ?? "Käyttäjä");
+                          setUserSuggestions([]);
+                          setInviteError(null);
+                        }}
+                        style={({ pressed }) => [styles.suggestionItem, pressed && styles.suggestionItemPressed]}
+                      >
+                        <Text style={styles.suggestionTitle}>{user.display_name ?? "Käyttäjä"}</Text>
+                        <Text style={styles.suggestionMeta}>{user.email ?? user.id}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+                {isSearchingUsers ? <InlineMessage tone="info" message="Haetaan käyttäjiä..." /> : null}
+                {inviteError ? <InlineMessage tone="warning" message={inviteError} /> : null}
+                {inviteMessage ? <InlineMessage tone="info" message={inviteMessage} /> : null}
+                <AppButton label="Lähetä kutsu" onPress={handleInviteAccess} />
+              </View>
+            </View>
+          ) : (
+            <InlineMessage
+              tone="warning"
+              message={
+                viewerRole === "family"
+                  ? "Jakojen muokkaus vaatii perheen ylläpito-oikeuden."
+                  : "Tällä roolilla jakoja ei voi muokata."
+              }
+            />
+          )}
+
           {sharing.length ? (
             <View style={styles.listStack}>
               {sharing.map((access) => (
                 <View key={access.id} style={styles.listCard}>
                   <Text style={styles.listTitle}>{access.personName}</Text>
-                  <Text style={styles.listMeta}>{access.role}</Text>
+                  <Text style={styles.listMeta}>
+                    {access.role === "family" ? (access.isAdmin ? "Perheen ylläpitäjä" : "Perhe") : "Hoitaja"}
+                  </Text>
                   <View style={styles.actionWrap}>
                     {access.canViewProfile ? <Pill label="Profiili" tone="brand" /> : null}
                     {access.canViewHealth ? <Pill label="Terveys" tone="brand" /> : null}
                     {access.canViewReminders ? <Pill label="Muistutukset" tone="brand" /> : null}
                     {access.canUploadMedia ? <Pill label="Media" tone="brand" /> : null}
+                    {access.canComment ? <Pill label="Kommentit" tone="brand" /> : null}
                   </View>
+
+                  {canManageSharingAccess ? (
+                    <>
+                      <AppButton
+                        label={expandedAccessId === access.id ? "Piilota oikeudet" : "Muokkaa oikeuksia"}
+                        onPress={() => setExpandedAccessId(expandedAccessId === access.id ? null : access.id)}
+                        secondary
+                      />
+                      {expandedAccessId === access.id ? (
+                        <View style={styles.sharingEditor}>
+                          {access.role === "family" ? (
+                            <AppButton
+                              label={access.isAdmin ? "Poista ylläpito-oikeus" : "Anna ylläpito-oikeus"}
+                              onPress={() => toggleFamilyAdmin(access.id)}
+                              secondary
+                            />
+                          ) : null}
+                          <View style={styles.editorRow}>
+                            <AppButton
+                              label={access.canViewHealth ? "Piilota terveys" : "Salli terveys"}
+                              onPress={() => updateAccessPermissions(access.id, { canViewHealth: !access.canViewHealth })}
+                              secondary
+                            />
+                            <AppButton
+                              label={access.canViewCareInstructions ? "Piilota hoito" : "Salli hoito"}
+                              onPress={() =>
+                                updateAccessPermissions(access.id, { canViewCareInstructions: !access.canViewCareInstructions })
+                              }
+                              secondary
+                            />
+                          </View>
+                          <View style={styles.editorRow}>
+                            <AppButton
+                              label={access.canComment ? "Estä kommentit" : "Salli kommentit"}
+                              onPress={() => updateAccessPermissions(access.id, { canComment: !access.canComment })}
+                              secondary
+                            />
+                            <AppButton
+                              label={access.canUploadMedia ? "Estä kuvat" : "Salli kuvat"}
+                              onPress={() => updateAccessPermissions(access.id, { canUploadMedia: !access.canUploadMedia })}
+                              secondary
+                            />
+                          </View>
+                          {access.role !== "caretaker" ? (
+                            <AppButton
+                              label={access.canViewReminders ? "Piilota muistutukset" : "Salli muistutukset"}
+                              onPress={() => updateAccessPermissions(access.id, { canViewReminders: !access.canViewReminders })}
+                              secondary
+                            />
+                          ) : null}
+                          <AppButton label="Poista pääsy" onPress={() => removeAccess(access.id)} secondary />
+                        </View>
+                      ) : null}
+                    </>
+                  ) : null}
                 </View>
               ))}
             </View>
           ) : (
             <EmptyState
-              title="Ei jaettu vielä"
-              message="Täällä näkyvät perheenjäsenet ja hoitajat, joille lemmikin tiedot on jaettu."
+              title="Ei jakoja"
+              message="Perheenjäsenet ja hoitajat näkyvät täällä."
             />
           )}
         </Card>
@@ -836,8 +1013,10 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     gap: spacing[4],
-    backgroundColor: "#FFFDF8",
+    backgroundColor: colors.surfaceAccentMuted,
     borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.borderAccent,
   },
   heroTopRow: {
     flexDirection: "row",
@@ -854,7 +1033,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "#F4D9B8",
+    backgroundColor: colors.brandPrimarySoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -886,7 +1065,7 @@ const styles = StyleSheet.create({
     minHeight: 88,
     padding: spacing[4],
     borderRadius: radii.lg,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     gap: spacing[2],
@@ -935,6 +1114,41 @@ const styles = StyleSheet.create({
   formStack: {
     gap: spacing[3],
   },
+  sharingEditor: {
+    gap: spacing[3],
+    marginTop: spacing[2],
+    paddingTop: spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: colors.borderDefault,
+  },
+  editorRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing[3],
+  },
+  suggestionList: {
+    gap: spacing[2],
+  },
+  suggestionItem: {
+    padding: spacing[3],
+    borderRadius: radii.md,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    gap: spacing[1],
+  },
+  suggestionItemPressed: {
+    opacity: 0.8,
+  },
+  suggestionTitle: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.textPrimary,
+  },
+  suggestionMeta: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+  },
   buttonRow: {
     flexDirection: "row",
     gap: spacing[3],
@@ -951,7 +1165,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
   },
   listHeader: {
     flexDirection: "row",

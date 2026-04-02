@@ -1,6 +1,5 @@
 import { create } from "zustand";
 
-import { currentUser } from "../data/mockData";
 import { listRemindersForUser, saveReminder as saveReminderToDb } from "../lib/db";
 import { useSharingStore } from "./sharingStore";
 import { Reminder, ReminderGroup } from "../types/domain";
@@ -38,7 +37,7 @@ export const useReminderStore = create<ReminderState>((set) => ({
         status: row.status,
         type: (row.source_type as Reminder["type"] | null) ?? "manual",
         assigneeLabel:
-          row.user_id === dbUserId ? sessionUser?.displayName ?? currentUser.displayName : String(row.user_id),
+          row.user_id === dbUserId ? sessionUser?.displayName ?? "Sinä" : "Jaettu käyttäjä",
       })),
     });
   },
@@ -56,7 +55,7 @@ export const useReminderStore = create<ReminderState>((set) => ({
       dueAt: values.dueAt,
       type: values.type,
       status: "pending",
-      assigneeLabel: sessionUser?.displayName ?? currentUser.displayName,
+      assigneeLabel: sessionUser?.displayName ?? "Sinä",
     };
     const familyReminders = familyAccesses.map((access, index) => ({
       id: `${reminderBaseId}-family-${index + 1}`,
@@ -105,7 +104,7 @@ export const useReminderStore = create<ReminderState>((set) => ({
     }));
 
     const sessionUser = require("./authStore").useAuthStore.getState().sessionUser as { dbUserId?: string; displayName?: string } | null;
-    if (sessionUser?.dbUserId && nextReminder && nextReminder.assigneeLabel === (sessionUser.displayName ?? currentUser.displayName)) {
+    if (sessionUser?.dbUserId && nextReminder && nextReminder.assigneeLabel === (sessionUser.displayName ?? "Sinä")) {
       void saveReminderToDb({
         id: nextReminder.id,
         userId: sessionUser.dbUserId,
@@ -138,7 +137,7 @@ export const useReminderStore = create<ReminderState>((set) => ({
     }));
 
     const sessionUser = require("./authStore").useAuthStore.getState().sessionUser as { dbUserId?: string; displayName?: string } | null;
-    if (sessionUser?.dbUserId && nextReminder && nextReminder.assigneeLabel === (sessionUser.displayName ?? currentUser.displayName)) {
+    if (sessionUser?.dbUserId && nextReminder && nextReminder.assigneeLabel === (sessionUser.displayName ?? "Sinä")) {
       void saveReminderToDb({
         id: nextReminder.id,
         userId: sessionUser.dbUserId,
@@ -171,7 +170,7 @@ export const useReminderStore = create<ReminderState>((set) => ({
     }));
 
     const sessionUser = require("./authStore").useAuthStore.getState().sessionUser as { dbUserId?: string; displayName?: string } | null;
-    if (sessionUser?.dbUserId && nextReminder && nextReminder.assigneeLabel === (sessionUser.displayName ?? currentUser.displayName)) {
+    if (sessionUser?.dbUserId && nextReminder && nextReminder.assigneeLabel === (sessionUser.displayName ?? "Sinä")) {
       void saveReminderToDb({
         id: nextReminder.id,
         userId: sessionUser.dbUserId,

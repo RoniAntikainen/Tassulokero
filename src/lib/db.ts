@@ -99,6 +99,36 @@ export async function getUserProfileById(userId: string) {
   return data;
 }
 
+export async function searchUsersByDisplayName(query: string, excludeUserId?: string) {
+  const client = getDbClient();
+  if (!client) {
+    return [];
+  }
+
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  let request = (client as any)
+    .from("users")
+    .select("id, display_name, email")
+    .ilike("display_name", `%${normalizedQuery}%`)
+    .limit(8);
+
+  if (excludeUserId) {
+    request = request.neq("id", excludeUserId);
+  }
+
+  const { data, error } = await request;
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
+}
+
 export async function updateUserProfile(input: {
   id: string;
   displayName?: string;
@@ -289,7 +319,7 @@ export async function listPetAccessForOwnedPets(ownerUserId: string) {
 
   const { data, error } = await (client as any)
     .from("pet_access")
-    .select("*, pets!inner(owner_user_id)")
+    .select("*, pets!inner(owner_user_id), users(id, display_name)")
     .eq("pets.owner_user_id", ownerUserId)
     .order("created_at", { ascending: false });
 

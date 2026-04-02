@@ -2,3 +2,4 @@
 .env.*.local
 .expo
 dist
+node_modules

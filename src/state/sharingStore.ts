@@ -5,6 +5,7 @@ import { PetAccess } from "../types/domain";
 
 interface InviteAccessValues {
   petId: string;
+  userId: string;
   personName: string;
   role: "family" | "caretaker";
 }
@@ -27,7 +28,8 @@ export const useSharingStore = create<SharingState>((set) => ({
       accesses: rows.map((row: any) => ({
         id: row.id,
         petId: row.pet_id,
-        personName: row.user_id,
+        userId: row.user_id,
+        personName: row.users?.display_name ?? row.user_id,
         role: row.role,
         isAdmin: row.is_admin ?? undefined,
         canViewProfile: row.can_view_profile ?? undefined,
@@ -42,6 +44,7 @@ export const useSharingStore = create<SharingState>((set) => ({
     const nextAccess: PetAccess = {
       id: accessId,
       petId: values.petId,
+      userId: values.userId,
       personName: values.personName,
       role: values.role,
       isAdmin: values.role === "family" ? false : undefined,
@@ -62,7 +65,7 @@ export const useSharingStore = create<SharingState>((set) => ({
       void savePetAccess({
         id: nextAccess.id,
         petId: nextAccess.petId,
-        userId: nextAccess.personName,
+        userId: nextAccess.userId,
         role: nextAccess.role as "family" | "caretaker",
         isAdmin: nextAccess.isAdmin,
         canViewProfile: nextAccess.canViewProfile,
@@ -111,7 +114,7 @@ export const useSharingStore = create<SharingState>((set) => ({
       void savePetAccess({
         id: nextAccess.id,
         petId: nextAccess.petId,
-        userId: nextAccess.personName,
+        userId: nextAccess.userId,
         role: nextAccess.role as "family" | "caretaker",
         isAdmin: nextAccess.isAdmin,
         canViewProfile: nextAccess.canViewProfile,

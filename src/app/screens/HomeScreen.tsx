@@ -1,43 +1,51 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
-import { colors, radii, spacing, typography } from "../../theme/tokens";
-import { AppButton, Card, EmptyState, InlineMessage, Pill, Screen, SectionTitle } from "../../components/ui";
+import { Card, EmptyState, InlineMessage, Pill, Screen } from "../../components/ui";
 import { formatDueDate } from "../../lib/date";
 import { useAppStore } from "../../state/appStore";
 import { usePetStore } from "../../state/petStore";
 import { getReminderGroup, useReminderStore } from "../../state/reminderStore";
 import { useUpdateStore } from "../../state/updateStore";
+import { colors, radii, spacing, typography } from "../../theme/tokens";
+import { Pet, PetUpdate, Reminder } from "../../types/domain";
 
 export function HomeScreen() {
   const pets = usePetStore((state) => state.pets);
   const setActiveTab = useAppStore((state) => state.setActiveTab);
   const setPendingAddSection = useAppStore((state) => state.setPendingAddSection);
+  const setPendingPetDetailOpen = useAppStore((state) => state.setPendingPetDetailOpen);
+  const setPendingReminderDetailId = useAppStore((state) => state.setPendingReminderDetailId);
+  const setSelectedPetId = useAppStore((state) => state.setSelectedPetId);
   const flashMessage = useAppStore((state) => state.flashMessage);
   const setFlashMessage = useAppStore((state) => state.setFlashMessage);
   const reminders = useReminderStore((state) => state.reminders);
   const updates = useUpdateStore((state) => state.updates);
-  const [petMessage, setPetMessage] = useState<string | null>(null);
+  const [petMessage] = useState<string | null>(null);
 
+  const hasPets = pets.length > 0;
+  const pendingReminders = useMemo(
+    () => reminders.filter((reminder) => reminder.status === "pending"),
+    [reminders],
+  );
   const upcoming = useMemo(
     () =>
-      reminders
-        .filter((reminder) => reminder.status === "pending")
-        .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
-        .slice(0, 3),
-    [reminders],
+      pendingReminders
+        .slice()
+        .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime()),
+    [pendingReminders],
   );
   const latestEvents = useMemo(
     () =>
       updates
         .slice()
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 3),
+        .slice(0, 4),
     [updates],
   );
-  const activePetCount = pets.length;
-  const pendingReminderCount = reminders.filter((reminder) => reminder.status === "pending").length;
-  const hasPets = pets.length > 0;
+  const topReminder = upcoming[0];
+  const overdueCount = pendingReminders.filter((reminder) => getReminderGroup(reminder) === "overdue").length;
 
   useEffect(() => {
     if (!flashMessage) {
@@ -66,6 +74,17 @@ export function HomeScreen() {
     setActiveTab("pets");
   }
 
+  function openPetDetail(petId: string) {
+    setSelectedPetId(petId);
+    setPendingPetDetailOpen(true);
+    setActiveTab("pets");
+  }
+
+  function openReminderDetail(reminderId: string) {
+    setPendingReminderDetailId(reminderId);
+    setActiveTab("reminders");
+  }
+
   return (
     <Screen>
       {petMessage ? (
@@ -78,96 +97,248 @@ export function HomeScreen() {
           <InlineMessage tone="info" message={flashMessage} />
         </Card>
       ) : null}
+
       {!hasPets ? (
-        <View style={styles.primaryHero}>
-          <Text style={styles.heroEyebrow}>Koti</Text>
-          <Text style={styles.primaryHeroTitle}>Lisää ensimmäinen lemmikki</Text>
-          <Text style={styles.primaryHeroText}>Kun ensimmäinen lemmikki on lisätty, muistutukset ja tapahtumat näkyvät täällä.</Text>
-          <View style={styles.primaryHeroActions}>
-            <AppButton label="Lisää ensimmäinen lemmikki" onPress={openAddPet} />
-          </View>
-        </View>
-      ) : (
-        <View style={styles.hero}>
-          <Text style={styles.heroEyebrow}>Koti</Text>
-          <Text style={styles.heroTitle}>Koti</Text>
-          <Text style={styles.heroText}>Pidä tärkeimmät asiat yhdessä näkymässä.</Text>
-        </View>
-      )}
-
-      {hasPets ? (
         <>
-          <View style={styles.summaryStrip}>
-            <SummaryCard label="Lemmikit" value={String(activePetCount)} tone="default" />
-            <SummaryCard label="Muistutuksia" value={String(pendingReminderCount)} tone="default" />
-            {upcoming[0] ? <SummaryCard label="Seuraava muistutus" value={formatDueDate(upcoming[0].dueAt)} tone="default" /> : null}
+          <View style={styles.emptyHomeTop}>
+            <View style={styles.emptyHomeIcon}>
+              <Ionicons name="paw-outline" size={24} color={colors.brandPrimaryHover} />
+            </View>
+            <Text style={styles.emptyHomeTitle}>Lisää ensimmäinen lemmikki</Text>
+          </View>
+          <Card>
+            <EmptyState
+              title="Ei vielä lemmikkejä"
+              message="Lisää lemmikki"
+              actionLabel="Lisää lemmikki"
+              onAction={openAddPet}
+            />
+          </Card>
+        </>
+      ) : (
+        <>
+          {topReminder ? (
+            <Pressable onPress={() => openReminderDetail(topReminder.id)} style={({ pressed }) => [styles.primaryTaskCard, pressed && styles.pressed]}>
+              <View style={styles.primaryTaskLeading}>
+                <View style={styles.primaryTaskIcon}>
+                  <Ionicons
+                    name={overdueCount > 0 ? "alert-outline" : "time-outline"}
+                    size={18}
+                    color={overdueCount > 0 ? colors.danger : colors.warning}
+                  />
+                </View>
+                <View style={styles.primaryTaskCopy}>
+                  <Text style={styles.primaryTaskTitle}>{topReminder.title}</Text>
+                  <Text style={styles.primaryTaskMeta}>
+                    {pets.find((pet) => pet.id === topReminder.petId)?.name ?? "Lemmikki"} • {formatDueDate(topReminder.dueAt)}
+                  </Text>
+                </View>
+              </View>
+              <Pill
+                label={getReminderPillLabel(topReminder)}
+                tone={getReminderGroup(topReminder) === "overdue" ? "danger" : getReminderGroup(topReminder) === "today" ? "warning" : "brand"}
+              />
+            </Pressable>
+          ) : null}
+
+          <View style={styles.actionsRow}>
+            <ActionChip icon="notifications-outline" label="Muistutus" onPress={openAddReminder} />
+            <ActionChip icon="chatbubble-ellipses-outline" label="Päivitys" onPress={openAddUpdate} />
+            <ActionChip icon="add-circle-outline" label="Lemmikki" onPress={openAddPet} />
           </View>
 
-          <Card style={styles.quickActionsCard}>
-            <Text style={styles.quickActionsTitle}>Jatka tästä</Text>
-            <View style={styles.quickActionsGrid}>
-              <QuickActionTile title="Avaa eläimet" subtitle="Kaikki lemmikit" onPress={() => setActiveTab("pets")} />
-              <QuickActionTile title="Lisää muistutus" subtitle="Seuraava muistettava asia" onPress={openAddReminder} />
-              <QuickActionTile title="Kirjaa merkintä" subtitle="Uusi tapahtuma tai huomio" onPress={openAddUpdate} />
+          <Card style={styles.moduleCard}>
+            <View style={styles.moduleHeader}>
+              <Text style={styles.moduleTitle}>Lemmikit</Text>
+              <Pressable onPress={() => setActiveTab("pets")} style={styles.inlineLink}>
+                <Text style={styles.inlineLinkText}>Kaikki</Text>
+              </Pressable>
+            </View>
+            <View style={styles.petGrid}>
+              {pets.map((pet) => {
+                const petPending = pendingReminders.filter((reminder) => reminder.petId === pet.id);
+                const petGroup = petPending[0] ? getReminderGroup(petPending[0]) : null;
+                const petUpdates = updates.filter((update) => update.petId === pet.id).length;
+
+                return (
+                  <Pressable
+                    key={pet.id}
+                    onPress={() => openPetDetail(pet.id)}
+                    style={({ pressed }) => [styles.petTile, pressed && styles.pressed]}
+                  >
+                    <View style={styles.petTileTop}>
+                      <View style={[styles.petTileAvatar, { backgroundColor: pet.avatarColor }]}>
+                        <Text style={styles.petTileAvatarText}>{pet.name.slice(0, 1)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.petTileBody}>
+                      <Text numberOfLines={1} style={styles.petTileName}>
+                        {pet.name}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.petTileMeta}>
+                        {pet.breed ?? pet.species}
+                      </Text>
+                    </View>
+                    <View style={styles.petTileStats}>
+                      <View style={styles.petStat}>
+                        <Ionicons name="notifications-outline" size={14} color={colors.textTertiary} />
+                        <Text style={styles.petStatText}>{petPending.length}</Text>
+                      </View>
+                      <View style={styles.petStat}>
+                        <Ionicons name="chatbubble-ellipses-outline" size={14} color={colors.textTertiary} />
+                        <Text style={styles.petStatText}>{petUpdates}</Text>
+                      </View>
+                    </View>
+                    {petPending.length ? (
+                      <View style={styles.petTileFooter}>
+                        <Pill
+                          label={getPetStatusLabel(petPending)}
+                          tone={petGroup === "overdue" ? "danger" : petGroup === "today" ? "warning" : "brand"}
+                        />
+                      </View>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Card>
+
+          <Card style={styles.moduleCard}>
+            <View style={styles.moduleHeader}>
+              <Text style={styles.moduleTitle}>Muistutukset</Text>
+              <Pressable onPress={() => setActiveTab("reminders")} style={styles.inlineLink}>
+                <Text style={styles.inlineLinkText}>Avaa</Text>
+              </Pressable>
+            </View>
+            <View style={styles.stackList}>
+              {upcoming.slice(0, 3).length ? (
+                upcoming.slice(0, 3).map((reminder) => (
+                  <CompactReminderRow
+                    key={reminder.id}
+                    reminder={reminder}
+                    pet={pets.find((pet) => pet.id === reminder.petId)}
+                    onPress={() => openReminderDetail(reminder.id)}
+                  />
+                ))
+              ) : (
+                <View style={styles.inlineEmpty}>
+                  <Text style={styles.inlineEmptyTitle}>Ei avoimia muistutuksia</Text>
+                </View>
+              )}
+            </View>
+          </Card>
+
+          <Card style={styles.moduleCard}>
+            <View style={styles.moduleHeader}>
+              <Text style={styles.moduleTitle}>Kuulumiset</Text>
+              <Pressable onPress={() => setActiveTab("pets")} style={styles.inlineLink}>
+                <Text style={styles.inlineLinkText}>Lemmikit</Text>
+              </Pressable>
+            </View>
+            <View style={styles.stackList}>
+              {latestEvents.length ? (
+                latestEvents.map((event) => (
+                  <CompactUpdateRow
+                    key={event.id}
+                    event={event}
+                    pet={pets.find((pet) => pet.id === event.petId)}
+                  />
+                ))
+              ) : (
+                <View style={styles.inlineEmpty}>
+                  <Text style={styles.inlineEmptyTitle}>Ei vielä päivityksiä</Text>
+                </View>
+              )}
             </View>
           </Card>
         </>
-      ) : null}
-
-      {hasPets ? <SectionTitle title="Seuraavat muistutukset" actionLabel={upcoming.length ? "Näytä kaikki" : undefined} /> : null}
-      {hasPets && !upcoming.length ? (
-        <Card>
-          <EmptyState title="Ei tulevia muistutuksia" message="Kun lisäät muistutuksen, se näkyy täällä." actionLabel="Luo ensimmäinen muistutus" onAction={openAddReminder} />
-        </Card>
-      ) : null}
-      {hasPets && upcoming.map((reminder) => (
-        <Card key={reminder.id} style={styles.contentCard}>
-          <View style={styles.row}>
-            <View style={styles.reminderContent}>
-              <Text style={styles.reminderTitle}>{reminder.title}</Text>
-              <Text style={styles.reminderPetName}>
-                {pets.find((pet) => pet.id === reminder.petId)?.name ?? "Lemmikki"}
-              </Text>
-              <Text style={styles.reminderDescription}>{reminder.description}</Text>
-            </View>
-            <Pill
-              label={getReminderGroup(reminder) === "today" ? "Tänään" : getReminderGroup(reminder) === "overdue" ? "Myöhässä" : "Tulossa"}
-              tone={getReminderGroup(reminder) === "overdue" ? "danger" : getReminderGroup(reminder) === "today" ? "warning" : "brand"}
-            />
-          </View>
-          <Text style={styles.reminderMeta}>{formatDueDate(reminder.dueAt)}</Text>
-        </Card>
-      ))}
-
-      {hasPets ? <SectionTitle title="Viimeisimmät tärkeät tapahtumat" actionLabel={latestEvents.length ? "Päivitykset" : undefined} /> : null}
-      {hasPets && !latestEvents.length ? (
-        <Card>
-          <EmptyState title="Ei vielä tapahtumia" message="Merkinnät ja tärkeät muutokset näkyvät täällä." actionLabel="Kirjaa ensimmäinen merkintä" onAction={openAddUpdate} />
-        </Card>
-      ) : null}
-      {hasPets && latestEvents.map((event) => {
-        const eventPet = pets.find((pet) => pet.id === event.petId);
-
-        return (
-          <Card key={event.id} style={styles.contentCard}>
-            <View style={styles.row}>
-              <View style={styles.reminderContent}>
-                <Text style={styles.reminderTitle}>{eventPet?.name ?? "Lemmikki"}</Text>
-                <Text style={styles.reminderPetName}>{getEventMetaLabel(event.authorName, event.authorRole)}</Text>
-                <Text style={styles.reminderDescription}>{event.text}</Text>
-              </View>
-              {event.mediaCount ? (
-                <Pill label={`${event.mediaCount} kuvaa`} tone="brand" />
-              ) : (
-                <Pill label="Päivitys" />
-              )}
-            </View>
-            <Text style={styles.reminderMeta}>{formatDueDate(event.createdAt)}</Text>
-          </Card>
-        );
-      })}
+      )}
     </Screen>
   );
+}
+
+function ActionChip({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.actionChip, pressed && styles.pressed]}>
+      <Ionicons name={icon} size={18} color={colors.brandPrimaryHover} />
+      <Text style={styles.actionChipLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function CompactReminderRow({
+  reminder,
+  pet,
+  onPress,
+}: {
+  reminder: Reminder;
+  pet?: Pet;
+  onPress: () => void;
+}) {
+  const group = getReminderGroup(reminder);
+
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.rowCard, pressed && styles.pressed]}>
+      <View style={styles.rowMain}>
+        <View style={styles.rowCopy}>
+          <Text style={styles.rowTitle}>{reminder.title}</Text>
+          <Text style={styles.rowPetName}>{pet?.name ?? "Lemmikki"}</Text>
+          <Text style={styles.rowMeta}>{formatDueDate(reminder.dueAt)}</Text>
+        </View>
+        <Pill
+          label={group === "today" ? "Tänään" : group === "overdue" ? "Myöhässä" : "Tulossa"}
+          tone={group === "overdue" ? "danger" : group === "today" ? "warning" : "brand"}
+        />
+      </View>
+    </Pressable>
+  );
+}
+
+function CompactUpdateRow({
+  event,
+  pet,
+}: {
+  event: PetUpdate;
+  pet?: Pet;
+}) {
+  return (
+    <View style={styles.rowCard}>
+      <View style={styles.rowMain}>
+        <View style={styles.rowCopy}>
+          <Text style={styles.rowTitle}>{pet?.name ?? "Lemmikki"}</Text>
+          <Text style={styles.rowMeta}>{getEventMetaLabel(event.authorName, event.authorRole)}</Text>
+        </View>
+        <Pill label={event.mediaCount ? `${event.mediaCount} kuvaa` : "Päivitys"} tone="brand" />
+      </View>
+      <Text style={styles.rowBody} numberOfLines={3}>
+        {event.text}
+      </Text>
+    </View>
+  );
+}
+
+function getReminderPillLabel(reminder: Reminder) {
+  const group = getReminderGroup(reminder);
+  if (group === "overdue") return "Myöhässä";
+  if (group === "today") return "Tänään";
+  return "Tulossa";
+}
+
+function getPetStatusLabel(pending: Reminder[]) {
+  const first = pending[0];
+  if (!first) return "";
+  const group = getReminderGroup(first);
+  if (group === "overdue") return "Huomio";
+  if (group === "today") return "Tänään";
+  return `${pending.length} tehtävää`;
 }
 
 function getRoleLabel(role?: "owner" | "family" | "caretaker") {
@@ -185,272 +356,224 @@ function getEventMetaLabel(authorName: string, role?: "owner" | "family" | "care
   return `${authorName} • ${getRoleLabel(role)}`;
 }
 
-function QuickActionTile({
-  title,
-  subtitle,
-  onPress,
-}: {
-  title: string;
-  subtitle: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.quickActionTile, pressed && styles.quickActionTilePressed]}>
-      <Text style={styles.quickActionLabel}>{title}</Text>
-      <Text style={styles.quickActionText}>{subtitle}</Text>
-    </Pressable>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-  tone: "default";
-}) {
-  return (
-    <View style={styles.summaryCard}>
-      <Text style={styles.summaryLabel}>{label}</Text>
-      <Text style={styles.summaryValue}>{value}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  primaryHero: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 28,
-    padding: spacing[6],
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    gap: spacing[5],
-  },
-  hero: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 28,
-    padding: spacing[6],
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    gap: spacing[4],
-  },
-  heroSinglePet: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 28,
-    padding: spacing[6],
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    gap: spacing[4],
-  },
-  heroTopRow: {
-    flexDirection: "row",
+  emptyHomeTop: {
     alignItems: "center",
-    gap: spacing[4],
-  },
-  heroSinglePetBody: {
-    gap: spacing[2],
-    flex: 1,
-  },
-  heroMetaRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
     gap: spacing[3],
+    paddingVertical: spacing[6],
   },
-  heroActionRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing[3],
-  },
-  heroEyebrow: {
-    fontSize: typography.size.sm,
-    color: colors.textTertiary,
-    fontWeight: typography.weight.semibold,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  heroAvatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+  emptyHomeIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.brandPrimarySoft,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: colors.bgBase,
   },
-  heroAvatarText: {
-    fontSize: typography.size.xl,
-    fontWeight: typography.weight.bold,
-    color: colors.textPrimary,
-  },
-  heroTitle: {
+  emptyHomeTitle: {
     fontSize: typography.size["2xl"],
-    lineHeight: 32,
     fontWeight: typography.weight.bold,
     color: colors.textPrimary,
-    letterSpacing: -0.6,
-    marginBottom: spacing[2],
+    textAlign: "center",
   },
-  heroText: {
-    fontSize: typography.size.md,
-    lineHeight: 24,
-    color: colors.textSecondary,
-  },
-  primaryHeroTitle: {
-    fontSize: typography.size["3xl"],
-    lineHeight: 36,
-    fontWeight: typography.weight.bold,
-    color: colors.textPrimary,
-    letterSpacing: -0.8,
-  },
-  primaryHeroText: {
-    fontSize: typography.size.md,
-    lineHeight: 24,
-    color: colors.textSecondary,
-  },
-  primaryHeroActions: {
-    alignItems: "flex-start",
-  },
-  summaryStrip: {
-    flexDirection: "row",
-    gap: spacing[3],
-    marginTop: spacing[1],
-  },
-  summaryCard: {
-    flex: 1,
-    gap: spacing[2],
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[4],
-  },
-  summaryLabel: {
-    color: colors.textTertiary,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-  },
-  summaryValue: {
-    color: colors.textPrimary,
-    fontSize: typography.size.xl,
-    fontWeight: typography.weight.bold,
-    letterSpacing: -0.4,
-  },
-  petGrid: {
-    gap: spacing[4],
-  },
-  quickActionsCard: {
-    backgroundColor: "#FFFFFF",
-  },
-  quickActionsTitle: {
-    color: colors.textPrimary,
-    fontSize: typography.size.xl,
-    fontWeight: typography.weight.bold,
-    letterSpacing: -0.4,
-  },
-  quickActionsGrid: {
-    marginTop: spacing[4],
-    gap: spacing[3],
-  },
-  quickActionTile: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    backgroundColor: colors.bgSubtle,
-    padding: spacing[4],
-    gap: spacing[2],
-  },
-  quickActionTilePressed: {
-    opacity: 0.78,
-  },
-  quickActionLabel: {
-    color: colors.textPrimary,
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.semibold,
-  },
-  quickActionText: {
-    color: colors.textSecondary,
-    fontSize: typography.size.sm,
-    lineHeight: 20,
-  },
-  petCard: {
+  primaryTaskCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[4],
-    backgroundColor: "#FCFDFE",
+    justifyContent: "space-between",
+    gap: spacing[3],
+    padding: spacing[4],
     borderRadius: radii.xl,
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    padding: spacing[5],
-    shadowColor: "#101828",
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
   },
-  petCardActive: {
-    borderColor: colors.borderFocus,
-    backgroundColor: "#EEF9F6",
-    transform: [{ scale: 1.01 }],
+  primaryTaskLeading: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
   },
-  petAvatar: {
+  primaryTaskIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceWarning,
+    borderWidth: 1,
+    borderColor: colors.borderWarning,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryTaskCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  primaryTaskTitle: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.semibold,
+    color: colors.textPrimary,
+  },
+  primaryTaskMeta: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    gap: spacing[2],
+  },
+  actionChip: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSoft,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing[2],
+  },
+  actionChipLabel: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.textPrimary,
+  },
+  moduleCard: {
+    backgroundColor: colors.surfaceRaised,
+    gap: spacing[4],
+  },
+  moduleHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing[3],
+  },
+  moduleTitle: {
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.semibold,
+    color: colors.textPrimary,
+  },
+  inlineLink: {
+    paddingVertical: spacing[2],
+  },
+  inlineLinkText: {
+    fontSize: typography.size.sm,
+    color: colors.brandPrimaryHover,
+    fontWeight: typography.weight.semibold,
+  },
+  petGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing[3],
+  },
+  petTile: {
+    width: "48%",
+    minHeight: 184,
+    borderRadius: 24,
+    backgroundColor: colors.surfaceSoft,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    padding: spacing[4],
+    gap: spacing[4],
+  },
+  petTileTop: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  petTileAvatar: {
     width: 56,
     height: 56,
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
   },
-  petAvatarText: {
+  petTileAvatarText: {
     fontSize: typography.size.lg,
     fontWeight: typography.weight.bold,
     color: colors.textPrimary,
   },
-  petMeta: {
-    flex: 1,
-    gap: spacing[2],
+  petTileBody: {
+    gap: 2,
   },
-  petActions: {
-    minWidth: 96,
-  },
-  petName: {
-    fontSize: typography.size.lg,
-    fontWeight: typography.weight.semibold,
-    color: colors.textPrimary,
-  },
-  petBreed: {
-    color: colors.textSecondary,
-    fontSize: typography.size.sm,
-  },
-  row: {
-    flexDirection: "row",
-    gap: spacing[3],
-    justifyContent: "space-between",
-  },
-  contentCard: {
-    backgroundColor: "#FCFDFE",
-  },
-  reminderContent: {
-    flex: 1,
-    gap: spacing[2],
-  },
-  reminderTitle: {
+  petTileName: {
     fontSize: typography.size.md,
     fontWeight: typography.weight.semibold,
     color: colors.textPrimary,
   },
-  reminderDescription: {
+  petTileMeta: {
+    fontSize: typography.size.sm,
     color: colors.textSecondary,
-    fontSize: typography.size.sm,
-    lineHeight: 20,
   },
-  reminderPetName: {
-    color: colors.brandPrimaryHover,
+  petTileStats: {
+    flexDirection: "row",
+    gap: spacing[4],
+  },
+  petStat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+  },
+  petStatText: {
     fontSize: typography.size.sm,
+    color: colors.textSecondary,
     fontWeight: typography.weight.medium,
   },
-  reminderMeta: {
-    marginTop: spacing[3],
-    color: colors.textTertiary,
+  petTileFooter: {
+    marginTop: "auto",
+    alignItems: "flex-start",
+  },
+  stackList: {
+    gap: spacing[2],
+  },
+  rowCard: {
+    backgroundColor: colors.surfaceSoft,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    padding: spacing[4],
+    gap: spacing[3],
+  },
+  rowMain: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing[3],
+  },
+  rowCopy: {
+    flex: 1,
+    gap: spacing[1],
+  },
+  rowTitle: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.semibold,
+    color: colors.textPrimary,
+  },
+  rowMeta: {
     fontSize: typography.size.sm,
+    color: colors.textSecondary,
+  },
+  rowPetName: {
+    fontSize: typography.size.sm,
+    color: colors.brandPrimaryHover,
+    fontWeight: typography.weight.semibold,
+  },
+  rowBody: {
+    fontSize: typography.size.sm,
+    lineHeight: 20,
+    color: colors.textSecondary,
+  },
+  inlineEmpty: {
+    paddingVertical: spacing[2],
+  },
+  inlineEmptyTitle: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.textPrimary,
+  },
+  inlineEmptyText: {
+    fontSize: typography.size.sm,
+    lineHeight: 20,
+    color: colors.textSecondary,
+  },
+  pressed: {
+    opacity: 0.8,
   },
 });

@@ -46,6 +46,7 @@ export interface Reminder {
 export interface PetAccess {
   id: string;
   petId: string;
+  userId: string;
   personName: string;
   role: UserRole;
   isAdmin?: boolean;

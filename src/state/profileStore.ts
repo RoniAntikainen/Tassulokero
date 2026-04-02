@@ -24,8 +24,8 @@ interface ProfileState {
 }
 
 const defaultProfile: ProfileSettings = {
-  displayName: "Roni",
-  bio: "Pidän arjen tiedot, muistutukset ja hoitohistorian yhdessä paikassa.",
+  displayName: "Käyttäjä",
+  bio: "",
 };
 
 const defaultNotificationSettings: NotificationSettings = {

@@ -129,13 +129,13 @@ export function OnboardingScreen() {
 
 const styles = StyleSheet.create({
   hero: {
-    backgroundColor: "#FCFDFE",
+    backgroundColor: colors.surfaceSoft,
     borderRadius: 28,
     padding: spacing[6],
     borderWidth: 1,
     borderColor: colors.borderDefault,
     gap: spacing[3],
-    shadowColor: "rgba(15, 23, 32, 0.18)",
+    shadowColor: colors.textPrimary,
     shadowOpacity: 0.12,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },

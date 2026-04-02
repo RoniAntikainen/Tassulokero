@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Switch, Text, View } from "react-native";
 
-import { AppButton, Card, InlineMessage, Pill, Screen, SegmentedControl, TextField } from "../../components/ui";
+import { AppButton, Card, InlineMessage, Pill, Screen, TextField } from "../../components/ui";
 import { getPushPermissionSnapshot, requestPushPermissions } from "../../lib/notifications";
 import { useAuthStore } from "../../state/authStore";
 import { useProfileStore } from "../../state/profileStore";
@@ -23,15 +23,13 @@ export function ProfileScreen() {
   };
 
   const [displayNameInput, setDisplayNameInput] = useState(profileSettings.displayName);
-  const [bioInput, setBioInput] = useState(profileSettings.bio);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [pushPermissionState, setPushPermissionState] = useState<"unknown" | "granted" | "denied" | "web_unsupported" | "simulator_unsupported">("unknown");
   const [pushPermissionMessage, setPushPermissionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setDisplayNameInput(profileSettings.displayName);
-    setBioInput(profileSettings.bio);
-  }, [profileSettings.bio, profileSettings.displayName]);
+  }, [profileSettings.displayName]);
 
   useEffect(() => {
     void (async () => {
@@ -43,9 +41,9 @@ export function ProfileScreen() {
   function handleSaveProfile() {
     updateProfile({
       displayName: displayNameInput.trim() || profile.displayName,
-      bio: bioInput.trim(),
+      bio: profileSettings.bio,
     });
-    setSaveMessage("Profiilin tiedot tallennettiin.");
+    setSaveMessage("Tiedot tallennettu.");
   }
 
   async function handleRequestPushPermission() {
@@ -53,12 +51,12 @@ export function ProfileScreen() {
     setPushPermissionState(result.reason);
     setPushPermissionMessage(
       result.reason === "granted"
-        ? "Ilmoitukset sallittiin tällä laitteella."
+        ? "Ilmoitukset sallittu tällä laitteella."
         : result.reason === "web_unsupported"
-          ? "Ilmoituksia ei voi pyytää selaimessa."
+          ? "Selaimessa ilmoituslupaa ei voi pyytää."
           : result.reason === "simulator_unsupported"
             ? "Ilmoitukset vaativat fyysisen laitteen."
-            : "Ilmoituksia ei sallittu tällä laitteella.",
+            : "Ilmoituksia ei sallittu.",
     );
   }
 
@@ -77,32 +75,17 @@ export function ProfileScreen() {
         </View>
         <View style={styles.pills}>
           <Pill label={profile.roleProfile === "breeder" ? "Kasvattaja" : "Omistaja"} tone="brand" />
-          <Pill label={notificationSettings.pushEnabled ? "Ilmoitukset käytössä" : "Ilmoitukset pois"} />
-        </View>
-        <View style={styles.profileSummary}>
-          <View style={styles.summaryTile}>
-            <Text style={styles.summaryLabel}>Rooli</Text>
-            <Text style={styles.summaryValue}>{profile.roleProfile === "breeder" ? "Kasvattaja" : "Omistaja"}</Text>
-          </View>
-          <View style={styles.summaryTile}>
-            <Text style={styles.summaryLabel}>Muistutukset</Text>
-            <Text style={styles.summaryValue}>{notificationSettings.reminderPushEnabled ? "Päällä" : "Pois"}</Text>
-          </View>
-          <View style={styles.summaryTile}>
-            <Text style={styles.summaryLabel}>Päivitykset</Text>
-            <Text style={styles.summaryValue}>{notificationSettings.updatePushEnabled ? "Päällä" : "Pois"}</Text>
-          </View>
+          <Pill label={notificationSettings.pushEnabled ? "Ilmoitukset päällä" : "Ilmoitukset pois"} />
         </View>
         {kennelName ? <Text style={styles.kennel}>Kennel {kennelName}</Text> : null}
       </View>
 
       <Card style={styles.contentCard}>
-        <Text style={styles.sectionTitle}>Omat tiedot</Text>
+        <Text style={styles.sectionTitle}>Perustiedot</Text>
         <View style={styles.actionList}>
-          <TextField label="Näyttönimi" value={displayNameInput} onChangeText={setDisplayNameInput} placeholder="Näkyvä nimi" />
-          <TextField label="Esittely" value={bioInput} onChangeText={setBioInput} placeholder="Lyhyt esittely profiilista" />
+          <TextField label="Näyttönimi" value={displayNameInput} onChangeText={setDisplayNameInput} placeholder="Nimi" />
           {saveMessage ? <InlineMessage tone="info" message={saveMessage} /> : null}
-          <AppButton label="Tallenna tiedot" onPress={handleSaveProfile} secondary />
+          <AppButton label="Tallenna muutokset" onPress={handleSaveProfile} secondary />
         </View>
       </Card>
 
@@ -113,57 +96,48 @@ export function ProfileScreen() {
             tone={pushPermissionState === "granted" ? "info" : "warning"}
             message={
               pushPermissionState === "granted"
-                ? "Ilmoitukset ovat käytössä tällä laitteella."
+                ? "Ilmoitukset ovat käytössä."
                 : pushPermissionState === "web_unsupported"
                   ? "Ilmoitukset eivät ole käytössä selaimessa."
                   : pushPermissionState === "simulator_unsupported"
                     ? "Ilmoitukset vaativat fyysisen laitteen."
                     : pushPermissionState === "denied"
-                      ? "Ilmoituksia ei ole sallittu tällä laitteella."
-                      : "Ilmoitusten tila tarkistetaan."
+                      ? "Ilmoituksia ei ole sallittu."
+                      : "Tarkistetaan ilmoitusten tila."
             }
           />
           {pushPermissionMessage ? <InlineMessage tone="info" message={pushPermissionMessage} /> : null}
-          <SegmentedControl
-            options={[
-              { label: "Push päällä", value: "on" },
-              { label: "Push pois", value: "off" },
-            ]}
-            value={notificationSettings.pushEnabled ? "on" : "off"}
-            onChange={(value) => updateNotificationSettings({ pushEnabled: value === "on" })}
+          <NotificationSettingRow
+            label="Push-ilmoitukset"
+            description="Sallii ilmoitukset tälle laitteelle."
+            value={notificationSettings.pushEnabled}
+            onChange={(value) => updateNotificationSettings({ pushEnabled: value })}
           />
-          <SegmentedControl
-            options={[
-              { label: "Muistutukset päällä", value: "on" },
-              { label: "Muistutukset pois", value: "off" },
-            ]}
-            value={notificationSettings.reminderPushEnabled ? "on" : "off"}
-            onChange={(value) => updateNotificationSettings({ reminderPushEnabled: value === "on" })}
+          <NotificationSettingRow
+            label="Muistutukset"
+            description="Näyttää tulevat hoito- ja arjen muistutukset."
+            value={notificationSettings.reminderPushEnabled}
+            onChange={(value) => updateNotificationSettings({ reminderPushEnabled: value })}
           />
-          <SegmentedControl
-            options={[
-              { label: "Päivitykset päällä", value: "on" },
-              { label: "Päivitykset pois", value: "off" },
-            ]}
-            value={notificationSettings.updatePushEnabled ? "on" : "off"}
-            onChange={(value) => updateNotificationSettings({ updatePushEnabled: value === "on" })}
+          <NotificationSettingRow
+            label="Päivitykset"
+            description="Ilmoittaa uusista merkinnöistä ja muutoksista."
+            value={notificationSettings.updatePushEnabled}
+            onChange={(value) => updateNotificationSettings({ updatePushEnabled: value })}
           />
-          <SegmentedControl
-            options={[
-              { label: "Markkinointi pois", value: "off" },
-              { label: "Markkinointi päällä", value: "on" },
-            ]}
-            value={notificationSettings.marketingPushEnabled ? "on" : "off"}
-            onChange={(value) => updateNotificationSettings({ marketingPushEnabled: value === "on" })}
+          <NotificationSettingRow
+            label="Markkinointi"
+            description="Tarjoukset ja muut ei-välttämättömät viestit."
+            value={notificationSettings.marketingPushEnabled}
+            onChange={(value) => updateNotificationSettings({ marketingPushEnabled: value })}
           />
-          <AppButton label="Pyydä ilmoituslupa" onPress={handleRequestPushPermission} secondary />
+          <AppButton label="Salli ilmoitukset" onPress={handleRequestPushPermission} secondary />
         </View>
       </Card>
 
       <Card style={styles.accountCard}>
         <Text style={styles.sectionTitle}>Tili</Text>
         <View style={styles.actionList}>
-          <AppButton label="Tiliasetukset" secondary />
           <AppButton label="Kirjaudu ulos" onPress={signOut} />
         </View>
       </Card>
@@ -171,9 +145,37 @@ export function ProfileScreen() {
   );
 }
 
+function NotificationSettingRow({
+  label,
+  description,
+  value,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <View style={styles.settingRow}>
+      <View style={styles.settingCopy}>
+        <Text style={styles.settingLabel}>{label}</Text>
+        <Text style={styles.settingDescription}>{description}</Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        trackColor={{ false: colors.borderStrong, true: colors.brandPrimary }}
+        thumbColor={colors.surfaceRaised}
+        ios_backgroundColor={colors.borderStrong}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   heroCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceRaised,
     borderRadius: 28,
     padding: spacing[6],
     borderWidth: 1,
@@ -189,7 +191,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     alignItems: "center",
@@ -225,39 +227,15 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: spacing[2],
   },
-  profileSummary: {
-    flexDirection: "row",
-    gap: spacing[3],
-  },
-  summaryTile: {
-    flex: 1,
-    gap: spacing[2],
-    borderRadius: 18,
-    backgroundColor: "#F9FAFB",
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[4],
-  },
-  summaryLabel: {
-    color: colors.textTertiary,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-  },
-  summaryValue: {
-    color: colors.textPrimary,
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.semibold,
-  },
   kennel: {
     color: colors.textSecondary,
     fontSize: typography.size.sm,
   },
   contentCard: {
-    backgroundColor: "#FCFDFE",
+    backgroundColor: colors.surfaceSoft,
   },
   accountCard: {
-    backgroundColor: "#FBFCFE",
+    backgroundColor: colors.surfaceAccentMuted,
   },
   sectionTitle: {
     fontSize: typography.size.lg,
@@ -273,5 +251,31 @@ const styles = StyleSheet.create({
   actionList: {
     marginTop: spacing[4],
     gap: spacing[3],
+  },
+  settingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing[4],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[4],
+    borderRadius: 20,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+  },
+  settingCopy: {
+    flex: 1,
+    gap: spacing[1],
+  },
+  settingLabel: {
+    color: colors.textPrimary,
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.semibold,
+  },
+  settingDescription: {
+    color: colors.textSecondary,
+    fontSize: typography.size.sm,
+    lineHeight: 20,
   },
 });

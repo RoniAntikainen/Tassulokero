@@ -13,21 +13,21 @@ import {
 
 export const currentUser = {
   id: "user-1",
-  displayName: "Roni",
-  email: "roni@example.com",
+  displayName: "Käyttäjä",
+  email: "kayttaja@example.com",
 };
 
 export const pets: Pet[] = [
   {
     id: "pet-1",
     name: "Luna",
-    species: "Dog",
+    species: "Koira",
     breed: "Border Collie",
     photoLabel: "luna-kevatlenkki.jpg",
     photoPreset: "square_400",
     birthDate: "2023-11-12",
     isBirthDateEstimated: false,
-    sex: "Female",
+    sex: "female",
     ageLabel: "2 v 4 kk",
     weightKg: 17.8,
     colorMarkings: "Black and white",
@@ -42,13 +42,13 @@ export const pets: Pet[] = [
   {
     id: "pet-2",
     name: "Milo",
-    species: "Dog",
+    species: "Koira",
     breed: "Finnish Lapphund",
     photoLabel: "milo-sohvalla.jpg",
     photoPreset: "square_400",
     birthDate: "2021-03-01",
     isBirthDateEstimated: true,
-    sex: "Male",
+    sex: "male",
     ageLabel: "5 v",
     weightKg: 21.4,
     colorMarkings: "Brown",
@@ -70,7 +70,7 @@ export const reminders: Reminder[] = [
     dueAt: "2026-04-05T10:00:00.000Z",
     status: "pending",
     type: "vaccination",
-    assigneeLabel: "Kaikki perhekäyttäjät",
+    assigneeLabel: "Perhe",
   },
   {
     id: "rem-2",
@@ -80,7 +80,7 @@ export const reminders: Reminder[] = [
     dueAt: "2026-03-29T08:00:00.000Z",
     status: "pending",
     type: "medication",
-    assigneeLabel: "Roni",
+    assigneeLabel: "Käyttäjä",
   },
   {
     id: "rem-3",
@@ -90,7 +90,7 @@ export const reminders: Reminder[] = [
     dueAt: "2026-03-20T09:00:00.000Z",
     status: "pending",
     type: "vet_visit",
-    assigneeLabel: "Roni",
+    assigneeLabel: "Käyttäjä",
   },
   {
     id: "rem-4",
@@ -99,7 +99,7 @@ export const reminders: Reminder[] = [
     dueAt: "2026-03-25T17:00:00.000Z",
     status: "completed",
     type: "manual",
-    assigneeLabel: "Roni",
+    assigneeLabel: "Käyttäjä",
   },
 ];
 
@@ -107,7 +107,8 @@ export const petAccessList: PetAccess[] = [
   {
     id: "acc-1",
     petId: "pet-1",
-    personName: "Sanna",
+    userId: "user-family-1",
+    personName: "Perheenjäsen",
     role: "family",
     isAdmin: true,
     canViewProfile: true,
@@ -120,7 +121,8 @@ export const petAccessList: PetAccess[] = [
   {
     id: "acc-2",
     petId: "pet-1",
-    personName: "Emma",
+    userId: "user-caretaker-1",
+    personName: "Hoitaja",
     role: "caretaker",
     canViewProfile: true,
     canViewHealth: false,
@@ -135,7 +137,7 @@ export const petUpdates: PetUpdate[] = [
   {
     id: "upd-1",
     petId: "pet-1",
-    authorName: "Emma",
+    authorName: "Hoitaja",
     authorRole: "caretaker",
     text: "Luna söi hyvin ja käytiin pitkä iltalenkki. Lisäsin yhden kuvan hoitohistoriaan.",
     createdAt: "2026-03-28T15:30:00.000Z",
@@ -144,7 +146,7 @@ export const petUpdates: PetUpdate[] = [
   {
     id: "upd-2",
     petId: "pet-1",
-    authorName: "Roni",
+    authorName: "Käyttäjä",
     authorRole: "owner",
     text: "Tassu näyttää jo paljon paremmalta.",
     createdAt: "2026-03-27T19:10:00.000Z",
